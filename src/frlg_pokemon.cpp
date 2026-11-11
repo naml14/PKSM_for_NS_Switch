@@ -15,6 +15,16 @@ std::uint32_t u32(const std::uint8_t* p) {
 
 PokemonSummary decode(const std::uint8_t* record, std::size_t length) {
     PokemonSummary result;
+    // The layout is fixed: a boxed record holds the identity, the names and the
+    // encrypted substructures, and a party record adds the party statistics on
+    // top. A shorter buffer cannot be read, so it is reported as unavailable
+    // instead of being read out of range.
+    constexpr std::size_t box_record_length = 0x50;
+    constexpr std::size_t party_record_length = 0x64;
+    if (record == nullptr || length < box_record_length) {
+        result.status = PokemonReadStatus::unavailable_content;
+        return result;
+    }
     result.personality = u32(record);
     result.ot_id = u32(record + 4);
 
@@ -36,7 +46,9 @@ PokemonSummary decode(const std::uint8_t* record, std::size_t length) {
     constexpr std::uint8_t growth_position[24] = {
         0,0,0,0,0,0,1,1,2,3,2,3,1,1,2,3,2,3,1,1,2,3,2,3
     };
-    result.species = u16(decrypted.data() + 12 * growth_position[result.personality % 24]);
+    static_assert(sizeof(growth_position) == 24, "The permutation table must cover every row");
+    constexpr std::size_t substructure_length = 12;
+    result.species = u16(decrypted.data() + substructure_length * growth_position[result.personality % 24]);
 
     // An unused slot keeps zeroed encrypted data, so the decrypted species
     // reads as 0, while its metadata bytes may still hold residues. Emptiness
@@ -60,7 +72,7 @@ PokemonSummary decode(const std::uint8_t* record, std::size_t length) {
     result.present = true;
     std::copy_n(record + 8, result.nickname.size(), result.nickname.begin());
     result.language = record[0x12];
-    if (length == 100) {
+    if (length >= party_record_length) {
         result.level = record[0x54];
         result.current_hp = u16(record + 0x56);
         result.max_hp = u16(record + 0x58);

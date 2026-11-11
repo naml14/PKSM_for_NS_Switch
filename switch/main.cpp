@@ -30,7 +30,9 @@ struct ProfileListing {
     s32 total = 0;
 };
 
-// Names are used only for the on-screen choice; never print IDs or save contents.
+// The profile nickname is used only for the on-screen choice. Account
+// identifiers are never printed. The save content is shown on the result
+// screen, which only ever reads it.
 bool list_profiles(std::array<Profile, max_profiles>& profiles, std::size_t& count,
                    bool& skipped, ProfileListing& listing) {
     std::array<AccountUid, max_profiles> ids{};
@@ -160,6 +162,10 @@ public:
 
     bool read_to_end(std::uint8_t* output, std::size_t capacity,
                      std::size_t& bytes_read) noexcept override {
+        if (file_ == nullptr) {
+            bytes_read = 0;
+            return false;
+        }
         bytes_read = std::fread(output, 1, capacity, file_);
         return std::ferror(file_) == 0;
     }
@@ -184,6 +190,10 @@ private:
 
 // Shows decoded content without modifying the save.
 void show_content(const std::vector<std::uint8_t>& image, std::size_t block) {
+    if (image.size() != pksm::frlg_image_size) {
+        std::printf("  Content: unavailable (the save image has an unexpected size)\n");
+        return;
+    }
     const auto content = pksm::read_frlg_content(image, block);
     if (!content.available) {
         std::printf("  Content: unavailable (%s)\n", content.unavailable_reason.c_str());

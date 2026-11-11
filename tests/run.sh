@@ -60,11 +60,13 @@ fi
 # Never write through a link that already exists.
 set -o noclobber
 work="$(mktemp -d "$root/run.XXXXXXXX")"
+# The cleanup is armed before the check, so the directory is removed even when
+# the check refuses to use it.
+trap 'rm -rf -- "$work"' EXIT
 if [[ -L "$work" ]]; then
     printf 'error: test scratch directory must not be a symbolic link\n' >&2
     exit 1
 fi
-trap 'rm -rf -- "$work"' EXIT
 
 scenarios=(healthy both fallback wrap mixed mixed-last partial international japanese neither
            partial-international partial-japanese section4-missing overflow carry checksum payload

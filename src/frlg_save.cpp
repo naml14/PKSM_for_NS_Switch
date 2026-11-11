@@ -72,8 +72,10 @@ SlotInspection inspect_slot(const std::vector<std::uint8_t>& image, std::size_t 
         const bool japanese = id == 4
             ? checksum(image, base, japanese_section_four_length) == stored
             : international;
-        section.checksum_international = section.checksum_international || international;
-        section.checksum_japanese = section.checksum_japanese || japanese;
+        // A duplicated section ID contributes to the same entry, so a section
+        // matches a range when any of its sectors matches it.
+        if (international) section.checksum_international = true;
+        if (japanese) section.checksum_japanese = true;
         if (id == 4) {
             result.section_four_observed = true;
             result.section_four_international = result.section_four_international || international;

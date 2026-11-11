@@ -24,7 +24,8 @@ std::string format_frlg_content(const FrlgContent& content, std::size_t block) {
         any = true;
     }
     if (!any) out << " none";
-    out << std::dec << "\ngender: " << (content.gender == 0 ? "male" : content.gender == 1 ? "female" : "unknown")
+    const char* gender = content.gender == 0 ? "male" : content.gender == 1 ? "female" : "unknown";
+    out << std::dec << "\ngender: " << gender
         << "\ntrainer id: " << content.trainer_id << " secret " << content.secret_id
         << "\nplay time: " << content.play_hours << "h " << unsigned(content.play_minutes) << "m " << unsigned(content.play_seconds) << "s"
         << "\nmoney: " << content.money << "\nparty: " << unsigned(content.party_count)

@@ -49,7 +49,13 @@ Slot 1: checksummed sections: international 0/14, Japanese 0/14; save index unav
 Game identity, language, and content are not verified.
 ```
 
-Use `frlg-inspect --report SAVE` for per-section checksum observations and warnings for both blocks, or `frlg-inspect --content SAVE` for decoded content and Pokémon summaries. Content displays decoded player names alongside raw byte codes and decoded Pokémon nicknames. When a name's codes require the other character table, it is decoded with that table and marked `[jp]`. The Switch result screen displays the decoded trainer name and up to 24 occupied box slots, with the number omitted. These modes do not identify the game, language, or revision or select a block. Run `frlg-inspect --help` for usage. Exit status is **0** when at least one slot has all 14 unique sections matching either checksum range; **1** for an input/read error or no complete range; and **2** for incorrect argument count. Exit 1 for an incomplete slot does not prove the save cannot be used. An erased slot has an invalid signature; this alone is not proof of corruption.
+Use `frlg-inspect --report SAVE` for per-section checksum observations and warnings for both blocks, or `frlg-inspect --content SAVE` for decoded content and Pokémon summaries.
+
+The content mode displays the decoded player name alongside the raw byte codes, and the decoded nickname of every Pokémon. When a name's codes require the other character table, it is decoded with that table and marked `[jp]`. The Switch result screen displays the decoded trainer name and up to 24 occupied box slots, with the number omitted.
+
+These modes do not identify the game, language, or revision, and they do not select a block. Run `frlg-inspect --help` for usage.
+
+The exit status is **0** when at least one slot has all 14 unique sections matching either checksum range, **1** for an input or read error or no complete range, and **2** for an incorrect argument count. Exit 1 for an incomplete slot does not prove the save cannot be used. An erased slot has an invalid signature; this alone is not proof of corruption.
 
 ## Checks and limits
 

@@ -62,16 +62,18 @@ int main(int argc, char** argv) {
     }
     image.resize(pksm::frlg_image_size);
     const pksm::SaveInspection result = pksm::inspect_frlg_save(image);
+    // The exit status rule is the same for every mode, so it is computed once
+    // and the modes cannot drift apart.
     bool any_complete = false;
+    for (const auto& slot : result.slots) {
+        any_complete = any_complete || slot.international_sections == pksm::frlg_section_count ||
+                       slot.japanese_sections == pksm::frlg_section_count;
+    }
     if (report || content) {
         if (report) std::cout << pksm::format_frlg_report(image);
         else for (std::size_t i = 0; i < result.slots.size(); ++i) {
             std::cout << "Save content (read-only; game identity, language and revision are not verified)\nBlock "
                       << i << '\n' << pksm::format_frlg_content(pksm::read_frlg_content(image, i), i);
-        }
-        for (const auto& slot : result.slots) {
-            any_complete = any_complete || slot.international_sections == pksm::frlg_section_count ||
-                           slot.japanese_sections == pksm::frlg_section_count;
         }
         if (!any_complete) {
             std::cerr << "error: no slot has complete matching checksums\n";

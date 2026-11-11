@@ -29,8 +29,8 @@ std::string format_frlg_report(const std::vector<std::uint8_t>& image) {
         for (std::size_t id = 0; id < slot.sections.size(); ++id) {
             const auto& section = slot.sections[id];
             if (!section.present) continue;
-            out << "  section " << id << ": sector " << section.sector_position << ", "
-                << ranges(section.checksum_international, section.checksum_japanese) << '\n';
+            const char* match = ranges(section.checksum_international, section.checksum_japanese);
+            out << "  section " << id << ": sector " << section.sector_position << ", " << match << '\n';
         }
         out << "  warnings: ";
         bool warning = false;
