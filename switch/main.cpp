@@ -1,6 +1,9 @@
+#include "pksm/frlg_console_write.hpp"
 #include "pksm/frlg_content.hpp"
+#include "pksm/frlg_money_editor.hpp"
 #include "pksm/frlg_pokemon.hpp"
 #include "pksm/frlg_text.hpp"
+#include "pksm/frlg_write.hpp"
 #include "pksm/switch_readonly.hpp"
 
 #include <switch.h>
@@ -9,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace {
@@ -188,6 +192,20 @@ private:
     bool cleanup_failed_ = false;
 };
 
+// Mounts the save data so that it can be written, which is only requested once
+// the user asked to edit. It never asks for write access while it only reads.
+bool mount_for_writing(std::uint64_t application_id,
+                       const pksm::SwitchProfileId& profile) noexcept {
+    AccountUid uid{};
+    static_assert(sizeof(uid) == sizeof(profile.bytes), "Unexpected account ID size");
+    std::memcpy(&uid, profile.bytes.data(), sizeof(uid));
+    return R_SUCCEEDED(fsdevMountSaveData(mount_name, application_id, uid));
+}
+
+void unmount_save() noexcept {
+    fsdevUnmountDevice(mount_name);
+}
+
 // Shows decoded content without modifying the save.
 void show_content(const std::vector<std::uint8_t>& image, std::size_t block) {
     if (image.size() != pksm::frlg_image_size) {
@@ -298,7 +316,7 @@ int main() {
     const bool listed = R_SUCCEEDED(init_result) &&
                          list_profiles(profiles, profile_count, skipped, listing);
 
-    enum class Screen { profile, title, result };
+    enum class Screen { profile, title, result, edit, confirm, write_result };
     Screen screen = Screen::profile;
     std::size_t profile_index = 0;
     std::size_t title_index = 0;
@@ -308,10 +326,18 @@ int main() {
     const std::array<const char*, 2> title_labels = {"FireRed (Spanish)", "LeafGreen (Spanish)"};
     pksm::SwitchInspectionResult result{};
     bool cleanup_failed = false;
+    bool write_mounted = false;
+    std::string save_path;
+    std::vector<std::uint8_t> save_image;
+    pksm::MoneyEditor editor{};
+    pksm::MoneyWritePlan plan;
+    pksm::ConsoleWriteResult write_result;
+    std::string edit_message;
 
     while (appletMainLoop()) {
         consoleClear();
-        std::printf("FRLG read-only inspection (experimental)\n\n");
+        std::printf("FRLG save tool (experimental)\n\n");
+        if (!edit_message.empty()) std::printf("%s\n\n", edit_message.c_str());
         if (!listed) {
             std::printf("Could not list existing profiles. No save was accessed.\n");
             std::printf("  account service result: 0x%08x\n",
@@ -336,16 +362,48 @@ int main() {
             for (std::size_t i = 0; i < titles.size(); ++i)
                 std::printf("%s %s\n", i == title_index ? ">" : " ", title_labels[i]);
             std::printf("No save is accessed until you select a title.\n");
-        } else {
+        } else if (screen == Screen::result) {
             show_result(result);
             if (cleanup_failed) std::printf("Cleanup reported an error; exit this application.\n");
-            else std::printf("B: choose another profile\n");
+            else std::printf("A: edit the money on the console, B: choose another profile\n");
+        } else if (screen == Screen::edit) {
+            const auto digits = pksm::format_money(editor.value);
+            std::printf("Money: ");
+            for (std::size_t i = 0; i < digits.size(); ++i) {
+                if (i == editor.digit) std::printf("[%c]", digits[i]);
+                else std::printf("%c", digits[i]);
+            }
+            std::printf("\n");
+            std::printf("Left/Right: choose the digit, Up/Down: change it\n");
+            std::printf("A: continue, B: cancel\n");
+        } else if (screen == Screen::confirm) {
+            std::printf("The money will go from %s to %s.\n",
+                        pksm::format_money(plan.old_money).c_str(),
+                        pksm::format_money(plan.new_money).c_str());
+            std::printf("%u bytes will change on the console save.\n",
+                        static_cast<unsigned>(plan.changed_bytes));
+            std::printf("A: write to the console, B: cancel\n");
+        } else {
+            if (write_result.ok) {
+                std::printf("Written and verified: %u -> %u, %u bytes changed.\n",
+                            static_cast<unsigned>(write_result.old_money),
+                            static_cast<unsigned>(write_result.new_money),
+                            static_cast<unsigned>(write_result.changed_bytes));
+            } else {
+                std::printf("The write failed: %s\n", write_result.reason.c_str());
+                if (write_result.rolled_back)
+                    std::printf("The original bytes were restored.\n");
+            }
+            std::printf("Close the game before you use the save: the game keeps its own copy\n");
+            std::printf("of the values in memory and writes them back when it saves.\n");
+            std::printf("B: back\n");
         }
         std::printf("\nPlus: exit\n");
         consoleUpdate(nullptr);
 
         padUpdate(&pad);
         const u64 pressed = padGetButtonsDown(&pad);
+        if (pressed) edit_message.clear();
         if (pressed & HidNpadButton_Plus) break;
         if (!listed || profile_count == 0 || cleanup_failed) continue;
         if (screen == Screen::profile) {
@@ -367,10 +425,73 @@ int main() {
                     screen = Screen::result;
                 }
             }
+        } else if (screen == Screen::result) {
+            if (pressed & HidNpadButton_A) {
+                const auto* target = pksm::switch_save_target(titles[title_index]);
+                if (!mount_for_writing(target->application_id, profiles[profile_index].id)) {
+                    // The platform refused the write mount. The app says so and
+                    // stops; it never retries with different privileges.
+                    edit_message = "The platform refused the write mount. No write was attempted.";
+                    screen = Screen::profile;
+                } else {
+                    write_mounted = true;
+                    save_path = std::string(mount_name) + ":/" + target->filename;
+                    if (!pksm::read_frlg_save_file(save_path, save_image)) {
+                        unmount_save();
+                        write_mounted = false;
+                        edit_message = "The save file could not be read for writing.";
+                        screen = Screen::profile;
+                    } else {
+                        const auto chosen = pksm::select_frlg_block(save_image);
+                        if (!chosen.ok) {
+                            unmount_save();
+                            write_mounted = false;
+                            edit_message = "The save cannot be edited: " + chosen.reason;
+                            screen = Screen::profile;
+                        } else {
+                            const auto content = pksm::read_frlg_content(save_image, chosen.block);
+                            editor.value = content.available ? content.money : 0;
+                            editor.digit = 0;
+                            screen = Screen::edit;
+                        }
+                    }
+                }
+            } else if (pressed & HidNpadButton_B) {
+                screen = Screen::profile;
+            }
+        } else if (screen == Screen::edit) {
+            if (pressed & HidNpadButton_B) {
+                unmount_save();
+                write_mounted = false;
+                screen = Screen::result;
+            } else {
+                if (pressed & HidNpadButton_Left)
+                    pksm::apply_money_editor_action(editor, pksm::MoneyEditorAction::left);
+                if (pressed & HidNpadButton_Right)
+                    pksm::apply_money_editor_action(editor, pksm::MoneyEditorAction::right);
+                if (pressed & HidNpadButton_Up)
+                    pksm::apply_money_editor_action(editor, pksm::MoneyEditorAction::up);
+                if (pressed & HidNpadButton_Down)
+                    pksm::apply_money_editor_action(editor, pksm::MoneyEditorAction::down);
+                if (pressed & HidNpadButton_A) {
+                    plan = pksm::plan_frlg_money_write(save_image, editor.value);
+                    if (plan.ok) screen = Screen::confirm;
+                }
+            }
+        } else if (screen == Screen::confirm) {
+            if (pressed & HidNpadButton_B) {
+                screen = Screen::edit;
+            } else if (pressed & HidNpadButton_A) {
+                write_result = pksm::commit_frlg_money(save_path, editor.value);
+                unmount_save();
+                write_mounted = false;
+                screen = Screen::write_result;
+            }
         } else if (pressed & HidNpadButton_B) {
-            screen = Screen::profile;
+            screen = Screen::result;
         }
     }
+    if (write_mounted) unmount_save();
     if (account_ready) accountExit();
     consoleExit(nullptr);
     return 0;

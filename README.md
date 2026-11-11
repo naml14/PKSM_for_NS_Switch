@@ -63,6 +63,14 @@ The exit status is **0** when at least one slot has all 14 unique sections match
 
 The tool recomputes the checksum of the section it changed, inspects the copy again, reads the money back and checks that every byte which differs from the original falls inside the changed value and that checksum. The copy is only produced when all of that passes, and the number of bytes that changed is reported as it is.
 
+## Edit the save on the console
+
+The application can change the amount of money of the save of the game that is running. It asks for the write mount only after the user chose to edit, it shows the old amount, the new amount and the number of bytes that will change, and it waits for an explicit confirmation before anything is written.
+
+After the write the file is read back, the money is read back, the whole inspection is repeated, and every byte that differs from the original has to fall inside the money and its checksum. When that verification fails, the original bytes are written back before the app stops. The save counter is never changed, so the block the game loads stays the block that was edited. When the platform refuses the write mount, the app says so and stops.
+
+**Close the game before you use the edited save.** The game keeps its own copy of the values in memory and writes them back when it saves, so a game that is still running can undo the change.
+
 ## Checks and limits
 
 Only exactly 131,072-byte images are accepted. The first two 14-sector slots are inspected independently. Each 4 KiB sector is checked for its signature, section ID and checksum; duplicate or out-of-range IDs and invalid signatures are reported. Counts are **unique** matching IDs, so duplicate sections cannot make a slot complete. Sector order may rotate. Incomplete slots report their matching-section counts; a section with an invalid signature or ID is not counted.

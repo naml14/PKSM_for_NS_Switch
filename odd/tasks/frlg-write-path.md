@@ -13,11 +13,17 @@ Branch: `feat/frlg-read-only`; delivery: `ask-on-risk`. The user delegated the d
 - S6: "If the platform refuses the write mount, the app says so and stops. It never retries with different privileges."
 - S7: "The user backup is read, never written, and it is the ground truth for every comparison."
 - S8: "The write is never partial: the file is written whole, and the app confirms the size on disk before closing it."
+- S9: "The write mount is only requested after the user chose to edit, and the app never asks for write access while it is only reading."
+- S10: "Nothing is written to the console until the user has seen the old value, the new value and the number of bytes that will change, and has confirmed it explicitly."
+- S11: "The original bytes are kept in memory until the write has been verified, and when the verification fails they are written back before the app stops."
+- S12: "After the write the file is read again, the money is read back, the whole inspection is repeated, and every byte that differs from the original has to fall inside the changed field and the recomputed checksum."
+- S13: "The app tells the user to close the game before the new values count, because the game keeps its own copy of the values in memory and writes them back when it saves."
+- S14: "The save counter is left alone, so the block the game loads stays the block that was edited."
 
 ## Tasks
 
-- [!] T1 (S1-S5, S7; commit pending): Produce a verified modified copy on the host. The first editable field is the money, because it is one value in one section, so its checksum is the only one that has to be recomputed, and a wrong value is obvious on the next read.
-- [ ] T2 (S6, S8; depends on T1 and on the native review prerequisite): Write to the console, with the original bytes kept in memory for a rollback, and only after the verification passed on the exact bytes to be written.
+- [x] T1 (S1-S5, S7; commit 690ea75): Produce a verified modified copy on the host. The first editable field is the money, because it is one value in one section, so its checksum is the only one that has to be recomputed, and a wrong value is obvious on the next read. Proven on the real save: 999999 -> 123456, five bytes changed, and the user confirmed the game loaded the new save.
+- [~] T2 (S6, S8-S14; in progress): Write to the console, with the original bytes kept in memory for a rollback, and only after the verification passed on the exact bytes to be written. The logic that decides and verifies lives in host-testable helpers; the console application only mounts the save for writing, drives the editor and asks for the confirmation.
 - [ ] T3 (S3-S5): Edit the Pokémon records, once the write path is proven with the money.
 
 ## Interface
@@ -50,6 +56,39 @@ struct MoneyEdit {
 MoneyEdit set_frlg_money(const std::vector<std::uint8_t>& original, std::uint32_t value);
 ```
 
+The new module `include/pksm/frlg_console_write.hpp`:
+
+```cpp
+// The result of a write to a save file.
+struct ConsoleWriteResult {
+    bool ok = false;
+    std::string reason;              // why it failed, empty when it worked
+    bool rolled_back = false;        // the original bytes were written back
+    std::size_t changed_bytes = 0;   // how many bytes differ from the original
+    std::uint32_t old_money = 0;
+    std::uint32_t new_money = 0;
+};
+
+// Writes the new money to the file at path, reads it back, verifies it and
+// writes the original bytes back when the verification fails.
+ConsoleWriteResult commit_frlg_money(const std::string& path, std::uint32_t value);
+```
+
+The new module `include/pksm/frlg_money_editor.hpp`:
+
+```cpp
+// The money as the user edits it on the console. The game accepts at most
+// 999999, so the editor never goes above that.
+struct MoneyEditor {
+    std::uint32_t value = 0;
+    std::size_t digit = 0;   // 0 is the most significant digit
+    static constexpr std::size_t digit_count = 6;
+};
+
+enum class MoneyEditorAction { left, right, up, down };
+void apply_money_editor_action(MoneyEditor& editor, MoneyEditorAction action) noexcept;
+```
+
 The command line: `frlg-inspect --set-money VALUE SAVE [OUTPUT]`. `VALUE` is a decimal u32 and anything else is an argument error. `SAVE` is the file to read and the single character `-` reads the save from standard input in binary mode. `OUTPUT` is optional: without it the tool verifies and prints without writing, and with it the tool writes the copy and refuses to write it when it resolves to the same file as `SAVE`. The tool prints the block it edited, the old and the new money, how many bytes changed and the result of the verification, and on failure it prints `error: <reason>` on standard error. The exit status stays consistent with the rest of the tool: 0 on success, 1 for an input, read or verification error, 2 for an argument error.
 
 ## Log
@@ -57,3 +96,5 @@ The command line: `frlg-inspect --set-money VALUE SAVE [OUTPUT]`. `VALUE` is a d
 - L1: The user asked to continue the development and agreed with the proposed order, which put the read path and the documented write path design before any editing.
 - L2: The first increment of the write path was delegated with the algorithm fixed in advance: pick the block the game loads, the highest clean save counter among the blocks whose fourteen sections match a checksum range, and refuse when two blocks share that counter; write the new money encoded with the SaveBlock2 key; recompute the checksum of the affected section; and verify the copy by inspecting it again, reading the money back and checking that no byte outside the permitted set changed.
 - L3: The delegated worker found that requiring exactly six changed bytes was impossible for arbitrary values, because a new value can share bytes with the old one and setting the current value changes nothing. The rule was corrected to the one in S5: the differences may only fall inside the permitted bytes, and the actual count is reported, including zero.
+- L4: The user restored the produced copy with their own backup tool and confirmed: "se ve perfecto, al cargar el nuevo save al juego. Proceda a T2". The write path on the host is therefore proven end to end on a real save, and the console path starts now.
+- L5: The console path keeps every decision in host-testable helpers, so the rules that protect a real save are verified without a console. The application only mounts the save for writing when the user asks to edit, shows the old value, the new value and the number of bytes that will change, and waits for an explicit confirmation. The original bytes stay in memory until the write has been read back and verified, and they are written back when that verification fails. The save counter is not touched, because the block the game loads has to stay the block that was edited.
