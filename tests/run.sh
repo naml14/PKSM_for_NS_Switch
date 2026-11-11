@@ -60,6 +60,9 @@ fi
 # Never write through a link that already exists.
 set -o noclobber
 work="$(mktemp -d "$root/run.XXXXXXXX")"
+# The tests that touch files write inside this scratch, so the cleanup check
+# can see that nothing is left behind.
+export PKSM_TEST_WORK="$work"
 # The cleanup is armed before the check, so the directory is removed even when
 # the check refuses to use it.
 trap 'rm -rf -- "$work"' EXIT
@@ -87,6 +90,11 @@ for id in {0..13}; do scenarios+=("tail-$id"); done
     tests/frlg_write_test.cpp src/frlg_write.cpp src/frlg_save.cpp src/frlg_content.cpp \
     -o "$work/frlg-write-test.exe"
 "$work/frlg-write-test.exe"
+"$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
+    tests/frlg_console_write_test.cpp src/frlg_console_write.cpp src/frlg_money_editor.cpp \
+    src/frlg_save.cpp src/frlg_content.cpp src/frlg_write.cpp \
+    -o "$work/frlg-console-write-test.exe"
+"$work/frlg-console-write-test.exe"
 "$work/frlg-report-test.exe"
 "$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
     tests/frlg_content_test.cpp src/frlg_content.cpp src/frlg_save.cpp -o "$work/frlg-content-test.exe"

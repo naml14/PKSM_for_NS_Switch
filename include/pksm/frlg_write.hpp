@@ -20,6 +20,18 @@ struct MoneyEdit {
     std::vector<std::size_t> changed_offsets;  // where they differ
 };
 
+// The block the game will load: the one with the highest clean save counter
+// among the blocks whose sections all match a checksum range. Two blocks with
+// the same counter are refused, because the game would pick one of them and
+// the edit could be ignored.
+struct BlockSelection {
+    bool ok = false;
+    std::string reason;    // why it failed, empty when it worked
+    std::size_t block = 0;
+};
+
+BlockSelection select_frlg_block(const std::vector<std::uint8_t>& image);
+
 // Sets the money of the block the game will load, in a copy of the image. The
 // original is never modified. The copy is returned only after it was verified:
 // the checksum of the affected section is recomputed, the copy is inspected

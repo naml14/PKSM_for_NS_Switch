@@ -34,13 +34,13 @@ void write32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32_t
 }
 }  // namespace
 
-MoneyEdit set_frlg_money(const std::vector<std::uint8_t>& original, std::uint32_t value) {
-    MoneyEdit edit;
-    if (original.size() != frlg_image_size) {
-        edit.reason = "Unsupported image size";
-        return edit;
+BlockSelection select_frlg_block(const std::vector<std::uint8_t>& image) {
+    BlockSelection selection;
+    if (image.size() != frlg_image_size) {
+        selection.reason = "Unsupported image size";
+        return selection;
     }
-    const auto inspection = inspect_frlg_save(original);
+    const auto inspection = inspect_frlg_save(image);
 
     // The game loads the block with the higher save counter, so that is the one
     // to edit. Two blocks with the same counter are refused: the game would pick
@@ -58,15 +58,33 @@ MoneyEdit set_frlg_money(const std::vector<std::uint8_t>& original, std::uint32_
             continue;
         }
         if (slot.save_index == inspection.slots[chosen].save_index) {
-            edit.reason = "Ambiguous block counter";
-            return edit;
+            selection.reason = "Ambiguous block counter";
+            return selection;
         }
         if (slot.save_index > inspection.slots[chosen].save_index) chosen = i;
     }
     if (!have_chosen) {
-        edit.reason = "No block with a complete matching checksum";
+        selection.reason = "No block with a complete matching checksum";
+        return selection;
+    }
+    selection.ok = true;
+    selection.block = chosen;
+    return selection;
+}
+
+MoneyEdit set_frlg_money(const std::vector<std::uint8_t>& original, std::uint32_t value) {
+    MoneyEdit edit;
+    if (original.size() != frlg_image_size) {
+        edit.reason = "Unsupported image size";
         return edit;
     }
+    const auto inspection = inspect_frlg_save(original);
+    const auto selection = select_frlg_block(original);
+    if (!selection.ok) {
+        edit.reason = selection.reason;
+        return edit;
+    }
+    const std::size_t chosen = selection.block;
 
     const auto& sections = inspection.slots[chosen].sections;
     const auto block_base = chosen * frlg_section_count * sector_length;
