@@ -202,8 +202,19 @@ bool mount_for_writing(std::uint64_t application_id,
     return R_SUCCEEDED(fsdevMountSaveData(mount_name, application_id, uid));
 }
 
-void unmount_save() noexcept {
-    fsdevUnmountDevice(mount_name);
+// The result of releasing the save device.
+struct ReleaseResult {
+    bool committed = false;
+    bool released = false;
+};
+
+// Commits the changes and then releases the device, so that the file on disk
+// holds what was written. Both steps report whether they worked.
+ReleaseResult release_save() noexcept {
+    ReleaseResult result;
+    result.committed = R_SUCCEEDED(fsdevCommitDevice(mount_name));
+    result.released = fsdevUnmountDevice(mount_name) == 0;
+    return result;
 }
 
 // Shows decoded content without modifying the save.
@@ -327,6 +338,7 @@ int main() {
     pksm::SwitchInspectionResult result{};
     bool cleanup_failed = false;
     bool write_mounted = false;
+    ReleaseResult release;
     std::string save_path;
     std::vector<std::uint8_t> save_image;
     pksm::MoneyEditor editor{};
@@ -382,6 +394,8 @@ int main() {
                         pksm::format_money(plan.new_money).c_str());
             std::printf("%u bytes will change on the console save.\n",
                         static_cast<unsigned>(plan.changed_bytes));
+            std::printf("Close the game before you use the save: the game keeps its own copy\n");
+            std::printf("of the values in memory and writes them back when it saves.\n");
             std::printf("A: write to the console, B: cancel\n");
         } else {
             if (write_result.ok) {
@@ -394,6 +408,10 @@ int main() {
                 if (write_result.rolled_back)
                     std::printf("The original bytes were restored.\n");
             }
+            if (!release.released)
+                std::printf("The save device could not be released cleanly. Close the game and\n");
+            else if (!release.committed)
+                std::printf("The device did not confirm the change. Close the game and check it.\n");
             std::printf("Close the game before you use the save: the game keeps its own copy\n");
             std::printf("of the values in memory and writes them back when it saves.\n");
             std::printf("B: back\n");
@@ -437,20 +455,25 @@ int main() {
                     write_mounted = true;
                     save_path = std::string(mount_name) + ":/" + target->filename;
                     if (!pksm::read_frlg_save_file(save_path, save_image)) {
-                        unmount_save();
+                        release = release_save();
                         write_mounted = false;
                         edit_message = "The save file could not be read for writing.";
                         screen = Screen::profile;
                     } else {
                         const auto chosen = pksm::select_frlg_block(save_image);
                         if (!chosen.ok) {
-                            unmount_save();
+                            release = release_save();
                             write_mounted = false;
                             edit_message = "The save cannot be edited: " + chosen.reason;
                             screen = Screen::profile;
                         } else {
                             const auto content = pksm::read_frlg_content(save_image, chosen.block);
-                            editor.value = content.available ? content.money : 0;
+                            // The editor never carries an amount the game
+                            // would not accept.
+                            editor.value =
+                                content.available && content.money <= pksm::money_maximum
+                                    ? content.money
+                                    : 0;
                             editor.digit = 0;
                             screen = Screen::edit;
                         }
@@ -461,7 +484,7 @@ int main() {
             }
         } else if (screen == Screen::edit) {
             if (pressed & HidNpadButton_B) {
-                unmount_save();
+                release = release_save();
                 write_mounted = false;
                 screen = Screen::result;
             } else {
@@ -482,16 +505,26 @@ int main() {
             if (pressed & HidNpadButton_B) {
                 screen = Screen::edit;
             } else if (pressed & HidNpadButton_A) {
-                write_result = pksm::commit_frlg_money(save_path, editor.value);
-                unmount_save();
-                write_mounted = false;
-                screen = Screen::write_result;
+                // The file is read again before the write, so that the bytes
+                // that go to the console are exactly the ones that were
+                // confirmed. If the save changed in the meantime, nothing is
+                // written.
+                std::vector<std::uint8_t> current;
+                if (!pksm::read_frlg_save_file(save_path, current) || current != save_image) {
+                    edit_message = "The save changed while you were editing. Nothing was written.";
+                    screen = Screen::edit;
+                } else {
+                    write_result = pksm::apply_frlg_money_write(save_path, plan);
+                    release = release_save();
+                    write_mounted = false;
+                    screen = Screen::write_result;
+                }
             }
         } else if (pressed & HidNpadButton_B) {
             screen = Screen::result;
         }
     }
-    if (write_mounted) unmount_save();
+    if (write_mounted) release_save();
     if (account_ready) accountExit();
     consoleExit(nullptr);
     return 0;

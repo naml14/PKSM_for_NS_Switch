@@ -143,6 +143,12 @@ int main() {
             apply_money_editor_action(editor, MoneyEditorAction::up);
             require(editor.value == money_maximum, "the value went above the maximum");
         }},
+        {"the editor never carries an amount above the maximum", [] {
+            MoneyEditor editor{};
+            editor.value = 1500000;
+            apply_money_editor_action(editor, MoneyEditorAction::down);
+            require(editor.value <= money_maximum, "the editor kept an out of range amount");
+        }},
         {"the amount is shown with six digits", [] {
             require(format_money(0) == "000000", "zero is not six digits");
             require(format_money(1234) == "001234", "the amount is not padded");
@@ -211,6 +217,52 @@ int main() {
             require(plan.original == image, "the plan does not keep the original bytes");
             require(plan.bytes.size() == image.size(), "the plan changes the size");
             require(plan.money_offset == sector_size + money_offset, "the money is in the wrong place");
+        }},
+        {"a write to a file that is not there is refused and creates nothing", [] {
+            const auto path = scratch() / "missing-directory" / "save.sav";
+            const auto result = commit_frlg_money(path.string(), 4242);
+            require(!result.ok, "the write was accepted");
+            require(!result.reason.empty(), "the refusal has no reason");
+            require(!std::filesystem::exists(path), "the write created the file");
+            require(!std::filesystem::exists(path.parent_path()),
+                    "the write created the directory");
+        }},
+        {"a file with mixed bytes can be restored", [] {
+            const auto image = make_image(17, 16);
+            const auto path = scratch() / "mixed.sav";
+            // A write that failed halfway leaves the first half new and the
+            // second half the original.
+            auto mixed = image;
+            for (std::size_t i = 0; i < mixed.size() / 2; ++i) mixed[i] = 0xA5;
+            write_file(path, mixed);
+            require(restore_frlg_save_file(path.string(), image), "the restore failed");
+            require(read_file(path) == image, "the file does not hold the original bytes");
+        }},
+        {"a write is refused when the file changed since the plan was prepared", [] {
+            const auto image = make_image(17, 16);
+            const auto path = scratch() / "changed.sav";
+            write_file(path, image);
+            const auto plan = plan_frlg_money_write(image, 900);
+            require(plan.ok, "the plan failed");
+            auto other = image;
+            other[0x5000] ^= 1;
+            write_file(path, other);
+            const auto result = apply_frlg_money_write(path.string(), plan);
+            require(!result.ok, "the write was accepted");
+            require(read_file(path) == other, "the file was written anyway");
+        }},
+        {"a block that matches only the Japanese range can be written", [] {
+            auto image = make_image(17, 16);
+            // A byte that only the international checksum of the section four
+            // covers: the block stays complete under the Japanese range.
+            image[4 * sector_size + 0xEC0] ^= 1;
+            const auto path = scratch() / "japanese.sav";
+            write_file(path, image);
+            const auto result = commit_frlg_money(path.string(), 4242);
+            require(result.ok, "the write failed");
+            const auto content = read_frlg_content(read_file(path), 0);
+            require(content.available, "the written file cannot be read");
+            require(content.money == 4242, "the money does not read back");
         }},
         {"a plan that changes a byte outside the permitted set is refused before the file is touched", [] {
             const auto image = make_image(17, 16);

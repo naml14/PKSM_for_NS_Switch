@@ -1,13 +1,12 @@
 #pragma once
 
+#include "pksm/frlg_write.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
 namespace pksm {
-
-// The game accepts at most this much money, so the editor never goes above it.
-inline constexpr std::uint32_t money_maximum = 999999;
 
 // The amount of money as the user edits it on the console.
 struct MoneyEditor {

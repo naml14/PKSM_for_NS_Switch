@@ -78,6 +78,10 @@ MoneyEdit set_frlg_money(const std::vector<std::uint8_t>& original, std::uint32_
         edit.reason = "Unsupported image size";
         return edit;
     }
+    if (value > money_maximum) {
+        edit.reason = "The amount is above the maximum the game accepts";
+        return edit;
+    }
     const auto inspection = inspect_frlg_save(original);
     const auto selection = select_frlg_block(original);
     if (!selection.ok) {

@@ -156,13 +156,20 @@ int main() {
             require(edit.reason == "Ambiguous block counter", "the reason differs");
         }},
         {"the extreme amounts work", [] {
-            for (const auto value : {0u, 4294967295u}) {
+            for (const auto value : {0u, money_maximum}) {
                 const auto image = make_image(17, 16);
                 const auto edit = set_frlg_money(image, value);
                 require(edit.ok, "the edit failed");
                 const auto content = read_frlg_content(edit.image, edit.block);
                 require(content.available && content.money == value, "the money does not read back");
             }
+        }},
+        {"an amount above the maximum the game accepts is refused", [] {
+            const auto image = make_image(17, 16);
+            const auto edit = set_frlg_money(image, money_maximum + 1);
+            require(!edit.ok, "the edit was accepted");
+            require(!edit.reason.empty(), "the refusal has no reason");
+            require(edit.image.empty(), "a copy was handed over anyway");
         }}
     };
 

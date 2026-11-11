@@ -16,6 +16,9 @@ std::uint32_t place_value(std::size_t digit) {
 
 void apply_money_editor_action(MoneyEditor& editor, MoneyEditorAction action) noexcept {
     if (editor.digit >= MoneyEditor::digit_count) editor.digit = 0;
+    // The editor never carries an amount the game would not accept, not even
+    // when it starts from a save that holds one.
+    if (editor.value > money_maximum) editor.value = money_maximum;
     switch (action) {
         case MoneyEditorAction::left:
             editor.digit = (editor.digit + MoneyEditor::digit_count - 1) % MoneyEditor::digit_count;

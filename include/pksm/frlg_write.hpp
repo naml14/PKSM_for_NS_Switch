@@ -7,6 +7,10 @@
 
 namespace pksm {
 
+// The game accepts at most this much money. A larger amount would leave the
+// save in a state the shop logic cannot handle, so it is refused.
+inline constexpr std::uint32_t money_maximum = 999999;
+
 // The result of editing one value of a save block. The copy is only returned
 // when the edit was verified, so a caller can trust every field of it.
 struct MoneyEdit {

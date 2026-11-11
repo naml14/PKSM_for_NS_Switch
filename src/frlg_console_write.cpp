@@ -30,14 +30,6 @@ bool read_file(const std::string& path, std::vector<std::uint8_t>& out) {
 
 }  // namespace
 
-bool read_frlg_save_file(const std::string& path, std::vector<std::uint8_t>& image) noexcept {
-    std::vector<std::uint8_t> bytes;
-    if (!read_file(path, bytes)) return false;
-    if (bytes.size() != frlg_image_size) return false;
-    image = std::move(bytes);
-    return true;
-}
-
 namespace {
 
 // The file keeps its size: the whole content is written from the beginning.
@@ -49,25 +41,44 @@ bool write_file(const std::string& path, const std::vector<std::uint8_t>& bytes)
         return false;
     }
     const std::size_t written = std::fwrite(bytes.data(), 1, bytes.size(), file);
-    const bool complete = written == bytes.size() && std::fflush(file) == 0;
+    bool complete = written == bytes.size() && std::fflush(file) == 0;
+    if (complete) {
+        // The size on disk is confirmed before the file is closed.
+        if (std::fseek(file, 0, SEEK_END) != 0) {
+            complete = false;
+        } else if (static_cast<std::size_t>(std::ftell(file)) != bytes.size()) {
+            complete = false;
+        }
+    }
     std::fclose(file);
     return complete;
 }
 
-// Puts the original bytes back and says whether that worked.
-void roll_back(const std::string& path, const MoneyWritePlan& plan,
-               ConsoleWriteResult& result) {
-    if (write_file(path, plan.original)) {
-        std::vector<std::uint8_t> written;
-        if (read_file(path, written) && written == plan.original) {
-            result.rolled_back = true;
-            return;
-        }
-    }
-    result.reason = "the write failed and the original bytes could not be restored";
+// Puts the original bytes back and reports whether the file holds them. A
+// write that failed halfway leaves the file with mixed bytes, so the original
+// has to be written again before the app stops.
+bool restore_original(const std::string& path, const MoneyWritePlan& plan) {
+    std::vector<std::uint8_t> current;
+    if (read_file(path, current) && current == plan.original) return true;
+    return restore_frlg_save_file(path, plan.original);
 }
 
 }  // namespace
+
+bool read_frlg_save_file(const std::string& path, std::vector<std::uint8_t>& image) noexcept {
+    std::vector<std::uint8_t> bytes;
+    if (!read_file(path, bytes)) return false;
+    if (bytes.size() != frlg_image_size) return false;
+    image = std::move(bytes);
+    return true;
+}
+
+bool restore_frlg_save_file(const std::string& path,
+                             const std::vector<std::uint8_t>& bytes) noexcept {
+    if (!write_file(path, bytes)) return false;
+    std::vector<std::uint8_t> written;
+    return read_file(path, written) && written == bytes;
+}
 
 MoneyWritePlan plan_frlg_money_write(const std::vector<std::uint8_t>& original,
                                      std::uint32_t value) {
@@ -108,6 +119,14 @@ ConsoleWriteResult apply_frlg_money_write(const std::string& path,
         result.reason = "Unsupported image size";
         return result;
     }
+    // The file has to still hold the bytes the plan was prepared from. If it
+    // changed in the meantime, what the user confirmed is not what would be
+    // written, so nothing is written at all.
+    std::vector<std::uint8_t> current;
+    if (!read_file(path, current) || current != plan.original) {
+        result.reason = "the file changed since the write was prepared";
+        return result;
+    }
     // Every byte that differs has to be inside the money or its checksum. The
     // permitted places are recomputed here, so a plan that was altered after
     // it was prepared cannot smuggle a change past this check.
@@ -124,30 +143,42 @@ ConsoleWriteResult apply_frlg_money_write(const std::string& path,
         }
     }
     if (!write_file(path, plan.bytes)) {
-        result.reason = "the file could not be written";
+        // The write may have failed halfway, leaving the file with mixed
+        // bytes, so the original is put back before the app stops.
+        result.rolled_back = restore_original(path, plan);
+        result.reason = result.rolled_back ? "the file could not be written completely"
+                                           : "the file could not be written and the original bytes could not be restored";
         return result;
     }
     std::vector<std::uint8_t> written;
     if (!read_file(path, written) || written.size() != frlg_image_size) {
-        roll_back(path, plan, result);
-        if (result.rolled_back) result.reason = "the file could not be read back";
+        result.rolled_back = restore_original(path, plan);
+        result.reason = result.rolled_back ? "the file could not be read back"
+                                           : "the file could not be read back and the original bytes could not be restored";
         return result;
     }
     if (written != plan.bytes) {
-        roll_back(path, plan, result);
-        if (result.rolled_back) result.reason = "the file does not hold the prepared bytes";
+        result.rolled_back = restore_original(path, plan);
+        result.reason = result.rolled_back ? "the file does not hold the prepared bytes"
+                                           : "the original bytes could not be restored";
         return result;
     }
     const auto content = read_frlg_content(written, plan.block);
     if (!content.available || content.money != plan.new_money) {
-        roll_back(path, plan, result);
-        if (result.rolled_back) result.reason = "the money does not read back";
+        result.rolled_back = restore_original(path, plan);
+        result.reason = result.rolled_back ? "the money does not read back"
+                                           : "the original bytes could not be restored";
         return result;
     }
     const auto inspection = inspect_frlg_save(written);
-    if (inspection.slots[plan.block].international_sections != frlg_section_count) {
-        roll_back(path, plan, result);
-        if (result.rolled_back) result.reason = "the written block is not complete";
+    const auto& slot = inspection.slots[plan.block];
+    // A block that matches the Japanese range is complete as well: the game
+    // accepts either range, so the verification accepts either one.
+    if (slot.international_sections != frlg_section_count &&
+        slot.japanese_sections != frlg_section_count) {
+        result.rolled_back = restore_original(path, plan);
+        result.reason = result.rolled_back ? "the written block is not complete"
+                                           : "the original bytes could not be restored";
         return result;
     }
     result.ok = true;

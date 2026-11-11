@@ -32,7 +32,7 @@ MoneyWritePlan plan_frlg_money_write(const std::vector<std::uint8_t>& original,
 struct ConsoleWriteResult {
     bool ok = false;
     std::string reason;              // why it failed, empty when it worked
-    bool rolled_back = false;        // the original bytes were written back
+    bool rolled_back = false;        // the file holds the original bytes again
     std::size_t changed_bytes = 0;   // how many bytes differ from the original
     std::uint32_t old_money = 0;
     std::uint32_t new_money = 0;
@@ -49,6 +49,11 @@ ConsoleWriteResult apply_frlg_money_write(const std::string& path,
 // Reads a save file into memory. It fails when the file cannot be read or when
 // it is not exactly 131072 bytes long.
 bool read_frlg_save_file(const std::string& path, std::vector<std::uint8_t>& image) noexcept;
+
+// Writes the given bytes to the file and reads them back to confirm that the
+// file holds them. It is the way to undo a write that failed halfway.
+bool restore_frlg_save_file(const std::string& path,
+                             const std::vector<std::uint8_t>& bytes) noexcept;
 
 // Reads the file, plans the change and writes it.
 ConsoleWriteResult commit_frlg_money(const std::string& path, std::uint32_t value);
