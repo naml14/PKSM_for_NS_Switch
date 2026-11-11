@@ -44,4 +44,14 @@ struct SaveInspection {
 // Inspects the supplied bytes without modifying them or inferring game identity.
 SaveInspection inspect_frlg_save(const std::vector<std::uint8_t>& image);
 
+// The number of bytes a section's checksum covers, for the international or the
+// Japanese range.
+std::size_t frlg_section_used_length(std::size_t section_id, bool international);
+
+// The checksum of the sector that starts at sector_base, over used_length
+// bytes. The reader and any writer use the same function, so they cannot drift
+// apart.
+std::uint16_t frlg_sector_checksum(const std::vector<std::uint8_t>& image,
+                                    std::size_t sector_base, std::size_t used_length);
+
 } // namespace pksm

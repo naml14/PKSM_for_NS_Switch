@@ -33,6 +33,12 @@ std::uint16_t checksum(const std::vector<std::uint8_t>& image,
     return static_cast<std::uint16_t>(sum + (sum >> 16));
 }
 
+std::size_t frlg_section_used_length_impl(std::size_t section_id, bool international) {
+    if (section_id >= section_count) return 0;
+    if (section_id == 4) return international ? international_lengths[4] : japanese_section_four_length;
+    return international_lengths[section_id];
+}
+
 SlotInspection inspect_slot(const std::vector<std::uint8_t>& image, std::size_t slot) {
     SlotInspection result;
     std::array<bool, section_count> seen{};
@@ -94,8 +100,16 @@ SlotInspection inspect_slot(const std::vector<std::uint8_t>& image, std::size_t 
 }
 } // namespace
 
-SaveInspection inspect_frlg_save(const std::vector<std::uint8_t>& image) {
-    SaveInspection result;
+std::size_t frlg_section_used_length(std::size_t section_id, bool international) {
+    return frlg_section_used_length_impl(section_id, international);
+}
+
+std::uint16_t frlg_sector_checksum(const std::vector<std::uint8_t>& image,
+                                    std::size_t sector_base, std::size_t used_length) {
+    return checksum(image, sector_base, used_length);
+}
+
+SaveInspection inspect_frlg_save(const std::vector<std::uint8_t>& image) {    SaveInspection result;
     if (image.size() != frlg_image_size) return result;
     result.supported_size = true;
     for (std::size_t slot = 0; slot < result.slots.size(); ++slot) {

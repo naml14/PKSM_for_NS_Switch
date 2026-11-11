@@ -57,6 +57,12 @@ These modes do not identify the game, language, or revision, and they do not sel
 
 The exit status is **0** when at least one slot has all 14 unique sections matching either checksum range, **1** for an input or read error or no complete range, and **2** for an incorrect argument count. Exit 1 for an incomplete slot does not prove the save cannot be used. An erased slot has an invalid signature; this alone is not proof of corruption.
 
+## Produce a verified copy
+
+`frlg-inspect --set-money VALUE SAVE [OUTPUT]` edits the amount of money of the block the game will load and produces a **verified copy**. It never writes to a console and never modifies the input file: without `OUTPUT` it only verifies and prints, and with `OUTPUT` it writes the copy there and refuses to write it over the input.
+
+The tool recomputes the checksum of the section it changed, inspects the copy again, reads the money back and checks that every byte which differs from the original falls inside the changed value and that checksum. The copy is only produced when all of that passes, and the number of bytes that changed is reported as it is.
+
 ## Checks and limits
 
 Only exactly 131,072-byte images are accepted. The first two 14-sector slots are inspected independently. Each 4 KiB sector is checked for its signature, section ID and checksum; duplicate or out-of-range IDs and invalid signatures are reported. Counts are **unique** matching IDs, so duplicate sections cannot make a slot complete. Sector order may rotate. Incomplete slots report their matching-section counts; a section with an invalid signature or ID is not counted.

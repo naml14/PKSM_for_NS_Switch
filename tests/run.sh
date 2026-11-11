@@ -74,7 +74,7 @@ scenarios=(healthy both fallback wrap mixed mixed-last partial international jap
 for id in {0..13}; do scenarios+=("tail-$id"); done
 
 "$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
-    src/main.cpp src/frlg_save.cpp src/frlg_report.cpp src/frlg_content.cpp src/frlg_pokemon.cpp src/frlg_content_report.cpp src/frlg_text.cpp -o "$work/frlg-inspect.exe"
+    src/main.cpp src/frlg_save.cpp src/frlg_report.cpp src/frlg_content.cpp src/frlg_pokemon.cpp src/frlg_content_report.cpp src/frlg_text.cpp src/frlg_write.cpp -o "$work/frlg-inspect.exe"
 "$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
     tests/frlg_content_report_test.cpp src/frlg_content_report.cpp src/frlg_pokemon.cpp src/frlg_text.cpp -o "$work/frlg-content-report-test.exe"
 "$work/frlg-content-report-test.exe"
@@ -83,6 +83,10 @@ for id in {0..13}; do scenarios+=("tail-$id"); done
 "$work/frlg-text-test.exe"
 "$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
     tests/frlg_report_test.cpp src/frlg_save.cpp src/frlg_report.cpp -o "$work/frlg-report-test.exe"
+"$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
+    tests/frlg_write_test.cpp src/frlg_write.cpp src/frlg_save.cpp src/frlg_content.cpp \
+    -o "$work/frlg-write-test.exe"
+"$work/frlg-write-test.exe"
 "$work/frlg-report-test.exe"
 "$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
     tests/frlg_content_test.cpp src/frlg_content.cpp src/frlg_save.cpp -o "$work/frlg-content-test.exe"
@@ -105,8 +109,8 @@ done
 
 passed=0
 failed=0
-usage=$'Usage: frlg-inspect [--report | --content] SAVE\n'
-help=$'Usage: frlg-inspect [--report | --content] SAVE\nRead-only FRLG checksum inspection; game identity is not verified.\n--report prints the per-section status of both save blocks.\n--content prints decoded content of both save blocks.\n'
+usage=$'Usage: frlg-inspect [--report | --content] SAVE\n       frlg-inspect --set-money VALUE SAVE [OUTPUT]\n'
+help=$'Usage: frlg-inspect [--report | --content] SAVE\n       frlg-inspect --set-money VALUE SAVE [OUTPUT]\nRead-only FRLG checksum inspection; game identity is not verified.\n--report prints the per-section status of both save blocks.\n--content prints decoded content of both save blocks.\n--set-money produces a verified copy with a new amount of money.\n'
 note=$'Game identity, language, and content are not verified.\n'
 no_slot=$'error: no slot has complete matching checksums\n'
 slot_empty='checksummed sections: international 0/14, Japanese 0/14; save index unavailable; complete checksum ranges: none; section 4 checksums: not observed; invalid sector signature'
@@ -220,5 +224,8 @@ for id in {0..13}; do
     if (( id == 4 )); then expected_slot="$slot_neither"; fi
     fixture_test "tail-$id" 1 "Slot 0: $expected_slot"$'\n'"Slot 1: $slot_empty"$'\n'"$note" "$no_slot"
 done
+money_out=$'block edited: 0\nmoney: 327686 -> 5000\nbytes changed: 5\nverification: the copy is complete and reads back the new amount\n'
+run_test set-money 0 "$money_out" '' "$work/healthy.sav" --set-money 5000 "$work/healthy.sav"
+run_test set-money-argument 2 '' "$usage" '' --set-money abc "$work/healthy.sav"
 printf '%s passed, %s failed\n' "$passed" "$failed"
 [[ "$failed" -eq 0 ]]

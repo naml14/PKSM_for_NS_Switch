@@ -1,91 +1,59 @@
-# Writing to a save: the design before any write
+# Writing to a save: the first verified copy
 
-Objective: define the first safe write capability, so that editing a save becomes a normal
-feature of the tool instead of the riskiest thing in it.
+Objective: produce a modified and verified copy of a save on the host, without ever writing to a console or to the input file.
+Branch: `feat/frlg-read-only`; delivery: `ask-on-risk`. The user delegated the design of this increment, so the specifications quote this document's own normative sentences.
 
-Status: design only. No code writes anything yet, and nothing in this document has been
-implemented or tested on a console.
+## Specs
 
-## What the read-only milestone already proves
+- S1: "A host tool that reads a save file, produces a modified copy and prints the diff is useful on its own, and it is the part that can be verified exhaustively without any risk to a game."
+- S2: "The pipeline reads the save into memory, changes a copy, recomputes the affected section checksums, reads the copy back and re-runs the whole inspection, shows the user a diff, and only then may write."
+- S3: "Only exactly 131,072-byte images are accepted."
+- S4: "The game loads the block with the higher save counter, so a write to the older block would be silently ignored, and a write to the newer block keeps the counter that makes it win."
+- S5: "The differences between the original and the copy may only fall inside the bytes of the changed field and the bytes of the recomputed checksum; a byte outside that set must never change, and the number of bytes that did change is reported as it is."
+- S6: "If the platform refuses the write mount, the app says so and stops. It never retries with different privileges."
+- S7: "The user backup is read, never written, and it is the ground truth for every comparison."
+- S8: "The write is never partial: the file is written whole, and the app confirms the size on disk before closing it."
 
-- The Gen 3 FRLG layout is verified against the `pokefirered` decompilation and PKHeX, and
-  against the user's own save: trainer name, play time, money, Pokedex counts, box occupancy
-  and party records agree between the host reader and the Switch reader.
-- Every sector carries a checksum over its used length, and the checksum of every section in
-  the user's save validates. A write that changes section bytes must therefore recompute the
-  checksum of the section it touched, or the game will reject the save.
-- The save holds two complete 14-sector blocks. The game loads the block with the higher
-  save counter, so a write to the older block would be silently ignored, and a write to the
-  newer block keeps the counter that makes it win.
+## Tasks
 
-## The first write candidate
+- [!] T1 (S1-S5, S7; commit pending): Produce a verified modified copy on the host. The first editable field is the money, because it is one value in one section, so its checksum is the only one that has to be recomputed, and a wrong value is obvious on the next read.
+- [ ] T2 (S6, S8; depends on T1 and on the native review prerequisite): Write to the console, with the original bytes kept in memory for a rollback, and only after the verification passed on the exact bytes to be written.
+- [ ] T3 (S3-S5): Edit the Pokémon records, once the write path is proven with the money.
 
-Change the money, and nothing else.
+## Interface
 
-It is the smallest possible change that still exercises the whole path: one 32-bit value at
-SaveBlock1 offset 0x290, obfuscated with the SaveBlock2 key at offset 0xF20, inside one
-section, whose checksum must be recomputed. It is visible on the next read, it is obvious to
-the user whether it worked, and a wrong value can be corrected by writing the original bytes
-back.
+Helpers exposed by `include/pksm/frlg_save.hpp`, implemented by reusing the internals of the reader so the two cannot drift apart:
 
-Editing a Pokémon is deliberately not the first step. It touches the encrypted substructures,
-the party and box checksums and the level and HP fields at once, so a mistake there is harder
-to detect and harder to undo.
+```cpp
+// The number of bytes a section's checksum covers, for the international or
+// the Japanese range.
+std::size_t frlg_section_used_length(std::size_t section_id, bool international);
+// The checksum of the sector that starts at sector_base, over used_length bytes.
+std::uint16_t frlg_sector_checksum(const std::vector<std::uint8_t>& image,
+                                    std::size_t sector_base, std::size_t used_length);
+```
 
-## The pipeline
+The new module `include/pksm/frlg_write.hpp`:
 
-1. Read the save through the read-only path, into memory, and keep the original bytes.
-2. Apply the change to the copy in memory.
-3. Recompute the checksum of every section whose bytes changed.
-4. Read the modified copy back and re-run the whole inspection: the changed field must hold
-   the new value, every other field must be identical to the original, and every section
-   checksum must validate.
-5. Show the user the diff, the old value and the new value, and the result of step 4.
-6. Only then, and only with an explicit confirmation, write.
+```cpp
+struct MoneyEdit {
+    bool ok = false;
+    std::string reason;                  // why it failed, empty when it worked
+    std::vector<std::uint8_t> image;      // the modified copy; empty when it failed
+    std::size_t block = 0;                // the block that was edited
+    std::uint32_t old_money = 0;
+    std::uint32_t new_money = 0;
+    std::size_t changed_bytes = 0;        // how many bytes differ from the original
+    std::vector<std::size_t> changed_offsets;  // where they differ
+};
 
-Steps 1 to 5 never touch the console. A host tool that reads a save file, produces a
-modified copy and prints the diff is useful on its own, and it is the part that can be
-verified exhaustively without any risk to a game.
+MoneyEdit set_frlg_money(const std::vector<std::uint8_t>& original, std::uint32_t value);
+```
 
-## Writing to the console
+The command line: `frlg-inspect --set-money VALUE SAVE [OUTPUT]`. `VALUE` is a decimal u32 and anything else is an argument error. `SAVE` is the file to read and the single character `-` reads the save from standard input in binary mode. `OUTPUT` is optional: without it the tool verifies and prints without writing, and with it the tool writes the copy and refuses to write it when it resolves to the same file as `SAVE`. The tool prints the block it edited, the old and the new money, how many bytes changed and the result of the verification, and on failure it prints `error: <reason>` on standard error. The exit status stays consistent with the rest of the tool: 0 on success, 1 for an input, read or verification error, 2 for an argument error.
 
-The console write is the last step and the only one that can damage a game. It is allowed
-only after the host pipeline has been proven, and with these conditions:
+## Log
 
-- The app mounts the save for writing only after the verification of step 4 has passed on
-  the exact bytes it is about to write.
-- The original bytes stay in memory for the whole session. If the write or the read-back
-  fails, the original bytes are written back immediately.
-- The write is never partial: the file is written whole, and the app confirms the size on
-  disk before closing it.
-- The game must be closed. A mounted save cannot be written while the game owns it, which is
-  the behaviour that protects the user.
-- If the platform refuses the write mount, the app says so and stops. It never retries with
-  different privileges.
-
-## Why the existing backup matters
-
-The user already has a JKSV backup of the real save, taken with the game closed. That backup
-is the ground truth for every comparison in this design, and the rollback of last resort.
-It must stay untouched: it is read, never written.
-
-## Abort conditions
-
-The write path is abandoned, not worked around, when:
-
-- the write mount is refused by the platform,
-- the read-back after a write does not match the intended change byte for byte,
-- any section checksum fails after the change,
-- the save counter and the slot selection would leave the game loading a different block
-  than the one that was modified.
-
-## Open questions to settle before implementing
-
-- Whether the Switch platform allows a third party application to mount another title's save
-  for writing at all. The read-only mount works; the write mount may be refused, and that
-  refusal is a safety property, not a bug to work around.
-- Whether the app should offer a "write to the console" step at all, or stop at producing a
-  verified modified file that the user deploys with their own backup tool. The second option
-  is safer and is the default recommendation until the first is proven.
-- Whether the trainer name, the party and the boxes become editable before the money, and
-  in which order.
+- L1: The user asked to continue the development and agreed with the proposed order, which put the read path and the documented write path design before any editing.
+- L2: The first increment of the write path was delegated with the algorithm fixed in advance: pick the block the game loads, the highest clean save counter among the blocks whose fourteen sections match a checksum range, and refuse when two blocks share that counter; write the new money encoded with the SaveBlock2 key; recompute the checksum of the affected section; and verify the copy by inspecting it again, reading the money back and checking that no byte outside the permitted set changed.
+- L3: The delegated worker found that requiring exactly six changed bytes was impossible for arbitrary values, because a new value can share bytes with the old one and setting the current value changes nothing. The rule was corrected to the one in S5: the differences may only fall inside the permitted bytes, and the actual count is reported, including zero.
