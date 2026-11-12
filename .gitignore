@@ -1,2 +1,6 @@
 /.tooling/
 /switch/build/
+
+# Exportaciones de registros del juego que el usuario usa para validar.
+# Contienen el nombre del entrenador original, asi que no se publican.
+/pokémons/
