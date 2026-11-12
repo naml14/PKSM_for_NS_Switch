@@ -175,6 +175,35 @@ void set_ivs(std::uint8_t* decrypted, std::uint32_t personality, const PokemonIv
     decrypted[base + 3] = static_cast<std::uint8_t>((decrypted[base + 3] & 0xC0) | (bits >> 24));
 }
 
+// The origin of a record lives in the canonical type three: the place and the
+// level it was found at, the game it came from, the ball and the gender of
+// the original trainer. pret/pokefirered include/pokemon.h, struct
+// PokemonSubstruct3: the met location at 0x01, the met level and the met game
+// at 0x02, the ball and the gender of the trainer at 0x03, and the flag of an
+// egg at 0x07.
+void read_origin(const std::uint8_t* decrypted, std::uint32_t personality,
+                 PokemonOrigin& origin) {
+    const auto base = substruct_at(personality, 3);
+    origin.egg = ((decrypted[base + 7] >> 6) & 1) != 0;
+    origin.location = decrypted[base + 1];
+    origin.level = static_cast<std::uint8_t>(decrypted[base + 2] & 0x7F);
+    origin.game = static_cast<std::uint8_t>((decrypted[base + 2] >> 7) & 0x0F);
+    origin.ball = static_cast<std::uint8_t>(decrypted[base + 3] & 0x0F);
+    origin.trainer_female = ((decrypted[base + 3] >> 4) & 1) != 0;
+}
+
+void set_origin(std::uint8_t* decrypted, std::uint32_t personality,
+                const PokemonOrigin& origin) {
+    const auto base = substruct_at(personality, 3);
+    decrypted[base + 7] = static_cast<std::uint8_t>(
+        (decrypted[base + 7] & 0x3F) | (origin.egg ? 0x40 : 0x00));
+    decrypted[base + 1] = origin.location;
+    decrypted[base + 2] = static_cast<std::uint8_t>(
+        (origin.level & 0x7F) | ((origin.game & 0x0F) << 7));
+    decrypted[base + 3] = static_cast<std::uint8_t>(
+        (origin.ball & 0x0F) | (origin.trainer_female ? 0x10 : 0x00));
+}
+
 // The health of a Pokemon at a level. pret/pokefirered src/pokemon.c, the
 // macro CALC_STAT: the base health of the species, the individual value and
 // the effort value of the health, the level, and ten more.
@@ -302,6 +331,7 @@ PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t le
     if (edit.set_level) set_experience(decrypted.data(), pid, frlg_exp_for_level(rate, level));
     if (edit.set_evs) set_evs(decrypted.data(), pid, evs);
     if (edit.set_ivs) set_ivs(decrypted.data(), pid, ivs);
+    if (edit.set_origin) set_origin(decrypted.data(), pid, edit.origin);
     if (edit.set_nickname) std::memcpy(copy.data() + nickname_offset, edit.nickname.data(), 10);
 
     write32(copy.data() + personality_offset, pid);

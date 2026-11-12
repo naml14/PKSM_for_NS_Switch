@@ -45,6 +45,9 @@ bool frlg_find_pid(const PokemonTraitRequest& request, std::uint32_t& pid) noexc
         (request.gender_ratio != 255 && request.gender == PokemonGender::genderless)) return false;
 
     const auto ot_xor = (request.trainer_id >> 16) ^ (request.trainer_id & 0xffffu);
+    // A personality value that a breeding could have produced: the remainder
+    // of dividing it by one hundred is at most thirty one.
+    const auto breeding_limit = request.bred;
     for (std::uint32_t low = 0; low <= 0xffffu; ++low) {
         if (frlg_traits_from_pid(low, request.trainer_id, request.gender_ratio).gender != request.gender)
             continue;
@@ -53,6 +56,7 @@ bool frlg_find_pid(const PokemonTraitRequest& request, std::uint32_t& pid) noexc
             for (std::uint32_t value = 0; value < 8; ++value) {
                 const auto high = ot_xor ^ low ^ value;
                 const auto candidate = (high << 16) | low;
+                if (breeding_limit && candidate % 100u > 31u) continue;
                 const auto traits = frlg_traits_from_pid(candidate, request.trainer_id, request.gender_ratio);
                 if (traits.nature == request.nature && traits.gender == request.gender && traits.shiny) {
                     pid = candidate;
@@ -64,6 +68,7 @@ bool frlg_find_pid(const PokemonTraitRequest& request, std::uint32_t& pid) noexc
             const auto residue = ((request.nature + 25u - low % 25u) * 16u) % 25u;
             for (std::uint32_t high = residue; high <= 0xffffu; high += 25u) {
                 const auto candidate = (high << 16) | low;
+                if (breeding_limit && candidate % 100u > 31u) continue;
                 const auto traits = frlg_traits_from_pid(candidate, request.trainer_id, request.gender_ratio);
                 if (traits.nature == request.nature && traits.gender == request.gender && !traits.shiny) {
                     pid = candidate;

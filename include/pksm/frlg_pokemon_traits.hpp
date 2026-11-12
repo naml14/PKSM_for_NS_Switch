@@ -24,6 +24,11 @@ struct PokemonTraitRequest {
     bool shiny = false;
     std::uint8_t gender_ratio = 127;
     std::uint32_t trainer_id = 0;
+    // A record that was bred takes the personality of a parent, so the
+    // remainder of dividing the personality value by one hundred has to be at
+    // most thirty one. The search refuses to return a value that a breeding
+    // could not have produced.
+    bool bred = false;
 };
 
 bool frlg_find_pid(const PokemonTraitRequest& request, std::uint32_t& pid) noexcept;

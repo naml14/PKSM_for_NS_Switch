@@ -26,7 +26,23 @@ void check_request(const PokemonTraitRequest& request) {
 
 int main() {
     const std::vector<std::pair<const char*, std::function<void()>>> tests = {
-        {"nature and names", [] {
+                {"the search refuses a personality a breeding could not produce", [] {
+            PokemonTraitRequest request{};
+            request.nature = 0;
+            request.gender = PokemonGender::male;
+            request.shiny = false;
+            request.gender_ratio = 127;
+            request.trainer_id = 0x75C5B692;
+            request.bred = true;
+            std::uint32_t pid = 0;
+            require(frlg_find_pid(request, pid), "the search found nothing");
+            require(pid % 100u <= 31u, "the personality is not one a breeding could produce");
+            const auto traits = frlg_traits_from_pid(pid, request.trainer_id, request.gender_ratio);
+            require(traits.nature == request.nature, "the nature does not match");
+            require(traits.gender == request.gender, "the gender does not match");
+            require(!traits.shiny, "the record is shiny and it was not asked for");
+        }},
+{"nature and names", [] {
             // 123456789 % 25 = 14 (Naive).
             // https://raw.githubusercontent.com/pret/pokefirered/master/src/pokemon.c
             // https://raw.githubusercontent.com/pret/pokefirered/master/include/constants/pokemon.h

@@ -27,6 +27,16 @@ struct PokemonEv {
     std::uint8_t special_defense = 0;
 };
 
+// The origin of a record: where it came from and who found it.
+struct PokemonOrigin {
+    bool egg = false;                // the record is an egg that has not hatched
+    std::uint8_t location = 0;       // where it was found
+    std::uint8_t level = 0;          // the level it was found at
+    std::uint8_t game = 0;           // the game it came from
+    std::uint8_t ball = 0;           // the ball it is in
+    bool trainer_female = false;     // the gender of the original trainer
+};
+
 // What can be changed in a record. A field that is not asked for keeps the
 // value it had.
 struct PokemonEdit {
@@ -40,6 +50,8 @@ struct PokemonEdit {
     PokemonIv ivs{};
     bool set_pid = false;
     std::uint32_t pid = 0;
+    bool set_origin = false;
+    PokemonOrigin origin{};
 };
 
 // The result of editing a record.
