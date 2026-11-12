@@ -34,6 +34,7 @@ Branch: `feat/frlg-read-only`; delivery: `ask-on-risk`. The user delegated the d
 - S31: "The moves of a record are left alone. The only case where they change is when the level goes down and the species can no longer have a move at that level, and then that move is removed."
 - S32: "A record that is written inside a save has the checksum of every section the record touches recomputed, because the game rejects a section whose checksum does not match its data. A record of eighty bytes does not fit inside one section, so it can touch two of them."
 - S33: "A record that is written inside a save is read back before the save is handed over, and the save is only returned when the record, its own checksum and the checksum of every section it touches all match."
+- S34: "The personality value of a record is given by the caller, which is the part that knows the traits the user asked for and whether the record is to be bred, and which searches for a personality value that a breeding could have produced."
 - S23: "The editor of a Pokémon is shown on the screen of the console, with the traits of the record and the values that can be changed."
 - S24: "The editor refuses the values that the game cannot hold, and it says which one."
 - S25: "The editor shows the level and the traits that the record will have after the change, before anything is written."
