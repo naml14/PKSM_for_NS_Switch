@@ -2,6 +2,7 @@
 #include "pksm/frlg_content.hpp"
 #include "pksm/frlg_money_editor.hpp"
 #include "pksm/frlg_pokemon.hpp"
+#include "pksm/frlg_pokemon_editor.hpp"
 #include "pksm/frlg_text.hpp"
 #include "pksm/frlg_write.hpp"
 #include "pksm/switch_readonly.hpp"
@@ -327,7 +328,8 @@ int main() {
     const bool listed = R_SUCCEEDED(init_result) &&
                          list_profiles(profiles, profile_count, skipped, listing);
 
-    enum class Screen { profile, title, result, edit, confirm, write_result };
+    enum class Screen { profile, title, result, edit, confirm, write_result,
+                        pokemon_choices, pokemon_edit, pokemon_confirm, pokemon_result };
     Screen screen = Screen::profile;
     std::size_t profile_index = 0;
     std::size_t title_index = 0;
@@ -345,6 +347,10 @@ int main() {
     pksm::MoneyWritePlan plan;
     pksm::ConsoleWriteResult write_result;
     std::string edit_message;
+    pksm::PokemonEditor pokemon;
+    pksm::PokemonEditResult pokemon_plan;
+    pksm::ImageWriteResult pokemon_write;
+    std::size_t pokemon_block = 0;
 
     while (appletMainLoop()) {
         consoleClear();
@@ -377,7 +383,7 @@ int main() {
         } else if (screen == Screen::result) {
             show_result(result);
             if (cleanup_failed) std::printf("Cleanup reported an error; exit this application.\n");
-            else std::printf("A: edit the money on the console, B: choose another profile\n");
+            else std::printf("A: edit money, X: edit Pokemon, B: choose another profile\n");
         } else if (screen == Screen::edit) {
             const auto digits = pksm::format_money(editor.value);
             std::printf("Money: ");
@@ -397,6 +403,75 @@ int main() {
             std::printf("Close the game before you use the save: the game keeps its own copy\n");
             std::printf("of the values in memory and writes them back when it saves.\n");
             std::printf("A: write to the console, B: cancel\n");
+        } else if (screen == Screen::pokemon_choices) {
+            std::printf("Choose Pokemon: Up/Down, A: edit, B: back\n");
+            const auto& choices = pokemon.choices();
+            if (choices.empty()) std::printf("No Pokemon available.\n");
+            const std::size_t first = (pokemon.selected() / 12) * 12;
+            for (std::size_t i = first; i < choices.size() && i < first + 12; ++i) {
+                const auto& choice = choices[i];
+                std::printf("%s %s, species %u, level %u - ", i == pokemon.selected() ? ">" : " ",
+                            choice.name.c_str(), static_cast<unsigned>(choice.species),
+                            static_cast<unsigned>(choice.level));
+                if (choice.in_party) std::printf("party %u\n", static_cast<unsigned>(choice.slot + 1));
+                else std::printf("box %u slot %u\n", static_cast<unsigned>(choice.box + 1),
+                                 static_cast<unsigned>(choice.slot + 1));
+            }
+            if (choices.size() > 12) std::printf("Pokemon %u/%u\n", static_cast<unsigned>(pokemon.selected() + 1),
+                                                  static_cast<unsigned>(choices.size()));
+        } else if (screen == Screen::pokemon_edit) {
+            std::printf("Editing %s\n", pokemon.choices()[pokemon.selected()].name.c_str());
+            std::printf("Up/Down: field, Left/Right: change, A: confirm, B: back\n");
+            std::printf("Nickname editing is unavailable.\n");
+            for (std::size_t i = 0; i < pksm::pokemon_field_count; ++i) {
+                const auto field = static_cast<pksm::PokemonField>(i);
+                const auto before = pokemon.value(field);
+                const auto after = pokemon.proposed(field);
+                std::printf("%s %s: %s", field == pokemon.field() ? ">" : " ",
+                            pksm::pokemon_field_name(field), before.c_str());
+                if (before != after) std::printf(" -> %s", after.c_str());
+                std::printf("\n");
+            }
+        } else if (screen == Screen::pokemon_confirm) {
+            std::printf("Confirm changes for %s\n", pokemon.choices()[pokemon.selected()].name.c_str());
+            bool any = false;
+            for (std::size_t i = 0; i < pksm::pokemon_field_count; ++i) {
+                const auto field = static_cast<pksm::PokemonField>(i);
+                const auto before = pokemon.value(field);
+                const auto after = pokemon.proposed(field);
+                if (before != after) {
+                    any = true;
+                    std::printf("%s: %s -> %s\n", pksm::pokemon_field_name(field), before.c_str(), after.c_str());
+                }
+            }
+            if (!any) std::printf("No visible field changes.\n");
+            std::printf("%u bytes will change.\n", static_cast<unsigned>(pokemon_plan.changed_bytes));
+            const auto& legality = pokemon.legality();
+            std::printf("Original record legality: %s (%u issues).\n",
+                        legality.legal ? "legal" : "issues found", static_cast<unsigned>(legality.issues.size()));
+            for (const auto issue : legality.issues) {
+                const char* text = "unknown issue";
+                switch (issue) {
+                    case pksm::LegalityIssue::personality_not_from_a_breeding: text = "personality not from breeding"; break;
+                    case pksm::LegalityIssue::move_not_learnable: text = "move not learnable"; break;
+                    case pksm::LegalityIssue::experience_not_of_the_level: text = "experience does not match level"; break;
+                    case pksm::LegalityIssue::effort_out_of_range: text = "effort out of range"; break;
+                    case pksm::LegalityIssue::individual_value_out_of_range: text = "individual value out of range"; break;
+                }
+                std::printf("  %s\n", text);
+            }
+            std::printf("A: write, B: back\n");
+        } else if (screen == Screen::pokemon_result) {
+            if (pokemon_write.ok && release.committed && release.released)
+                std::printf("Written and verified: %u bytes changed.\n", static_cast<unsigned>(pokemon_plan.changed_bytes));
+            else {
+                std::printf("The write was not completed: %s\n", pokemon_write.reason.c_str());
+                if (pokemon_write.rolled_back) std::printf("The original bytes were restored.\n");
+                if (!release.committed) std::printf("The device commit failed.\n");
+                if (!release.released) std::printf("The save device could not be released cleanly.\n");
+            }
+            std::printf("Close the game before using the save: it keeps values in memory\n");
+            std::printf("and writes them back when it saves.\nB: back\n");
         } else {
             if (write_result.ok) {
                 std::printf("Written and verified: %u -> %u, %u bytes changed.\n",
@@ -444,7 +519,16 @@ int main() {
                 }
             }
         } else if (screen == Screen::result) {
-            if (pressed & HidNpadButton_A) {
+            if (pressed & HidNpadButton_X) {
+                const auto chosen = pksm::select_frlg_block(result.image);
+                if (!chosen.ok) edit_message = "The save cannot be edited: " + chosen.reason;
+                else if (!pokemon.begin(result.image, chosen.block))
+                    edit_message = "The Pokemon list could not be read.";
+                else {
+                    pokemon_block = chosen.block;
+                    screen = Screen::pokemon_choices;
+                }
+            } else if (pressed & HidNpadButton_A) {
                 const auto* target = pksm::switch_save_target(titles[title_index]);
                 if (!mount_for_writing(target->application_id, profiles[profile_index].id)) {
                     // The platform refused the write mount. The app says so and
@@ -481,6 +565,76 @@ int main() {
                 }
             } else if (pressed & HidNpadButton_B) {
                 screen = Screen::profile;
+            }
+        } else if (screen == Screen::pokemon_choices) {
+            if (pressed & HidNpadButton_B) screen = Screen::result;
+            else if (pressed & HidNpadButton_A) {
+                std::string reason;
+                if (pokemon.open(reason)) screen = Screen::pokemon_edit;
+                else edit_message = reason;
+            } else {
+                if (pressed & HidNpadButton_Up) pokemon.select_previous();
+                if (pressed & HidNpadButton_Down) pokemon.select_next();
+            }
+        } else if (screen == Screen::pokemon_edit) {
+            if (pressed & HidNpadButton_B) screen = Screen::pokemon_choices;
+            else if (pressed & HidNpadButton_A) {
+                if (!pokemon.changed()) edit_message = "No changes to write.";
+                else {
+                    pokemon_plan = pokemon.apply(result.image, pokemon_block);
+                    if (pokemon_plan.ok) {
+                        pokemon_plan.changed_bytes = 0;
+                        for (std::size_t i = 0; i < result.image.size(); ++i)
+                            if (result.image[i] != pokemon_plan.image[i]) ++pokemon_plan.changed_bytes;
+                        screen = Screen::pokemon_confirm;
+                    } else edit_message = pokemon_plan.reason;
+                }
+            } else {
+                if (pressed & HidNpadButton_Up) pokemon.previous_field();
+                if (pressed & HidNpadButton_Down) pokemon.next_field();
+                if (pressed & (HidNpadButton_Left | HidNpadButton_Right)) {
+                    std::string reason;
+                    if (!pokemon.change((pressed & HidNpadButton_Right) ? 1 : -1, reason))
+                        edit_message = reason;
+                }
+            }
+        } else if (screen == Screen::pokemon_confirm) {
+            if (pressed & HidNpadButton_B) screen = Screen::pokemon_edit;
+            else if (pressed & HidNpadButton_A) {
+                pokemon_write = {};
+                release = {};
+                const auto* target = pksm::switch_save_target(titles[title_index]);
+                if (!mount_for_writing(target->application_id, profiles[profile_index].id)) {
+                    pokemon_write.reason = "The platform refused the write mount; nothing was written.";
+                    release.committed = release.released = true;
+                } else {
+                    write_mounted = true;
+                    save_path = std::string(mount_name) + ":/" + target->filename;
+                    std::vector<std::uint8_t> current;
+                    if (!pksm::read_frlg_save_file(save_path, current))
+                        pokemon_write.reason = "The save could not be read; nothing was written.";
+                    else if (current != result.image)
+                        pokemon_write.reason = "The save changed since inspection; nothing was written.";
+                    else {
+                        const auto prepared = pokemon.apply(current, pokemon_block);
+                        if (!prepared.ok) pokemon_write.reason = prepared.reason;
+                        else if (prepared.image != pokemon_plan.image)
+                            pokemon_write.reason = "The prepared image changed; nothing was written.";
+                        else pokemon_write = pksm::commit_frlg_image(save_path, current, prepared.image);
+                    }
+                    release.committed = R_SUCCEEDED(fsdevCommitDevice(mount_name));
+                    if (!release.committed && pokemon_write.ok) {
+                        pokemon_write.ok = false;
+                        pokemon_write.rolled_back = pksm::restore_frlg_save_file(save_path, current) &&
+                                                    R_SUCCEEDED(fsdevCommitDevice(mount_name));
+                        pokemon_write.reason = pokemon_write.rolled_back ? "Device commit failed; original restored."
+                                                                         : "Device commit failed; restoration could not be confirmed.";
+                    }
+                    release.released = fsdevUnmountDevice(mount_name) == 0;
+                    write_mounted = false;
+                    if (!release.released) cleanup_failed = true;
+                }
+                screen = Screen::pokemon_result;
             }
         } else if (screen == Screen::edit) {
             if (pressed & HidNpadButton_B) {
@@ -521,7 +675,10 @@ int main() {
                 }
             }
         } else if (pressed & HidNpadButton_B) {
-            screen = Screen::result;
+            if (screen == Screen::pokemon_result && pokemon_write.ok) {
+                edit_message = "Inspect the save again before making another edit.";
+                screen = Screen::title;
+            } else screen = Screen::result;
         }
     }
     if (write_mounted) release_save();

@@ -154,6 +154,11 @@ bool PokemonEditor::begin(const std::vector<std::uint8_t>& image, std::size_t bl
             const auto name = decode_frlg_name(mon.nickname.data(), mon.nickname.size(),
                                               mon.language);
             choice.name = name.text;
+            // A boxed Pokemon does not keep its level, so it comes from the
+            // experience of its record.
+            std::string why;
+            if (read_record(image, block, false, box, slot, why))
+                choice.level = read_frlg_pokemon_state(record_.data(), record_.size()).level;
             choices_.push_back(choice);
         }
     }
@@ -171,6 +176,7 @@ void PokemonEditor::select_previous() noexcept {
 }
 
 bool PokemonEditor::read_record(const std::vector<std::uint8_t>& image, std::size_t block,
+                                bool in_party, std::size_t box, std::size_t slot,
                                 std::string& reason) {
     record_.clear();
     if (image.size() != frlg_image_size || block >= 2) {
@@ -179,24 +185,23 @@ bool PokemonEditor::read_record(const std::vector<std::uint8_t>& image, std::siz
     }
     const auto inspection = inspect_frlg_save(image);
     const auto& sections = inspection.slots[block].sections;
-    const auto& choice = choices_[selected_];
     std::size_t start = 0;
     std::size_t length = 0;
     std::size_t first = 0;
-    if (choice.in_party) {
-        if (choice.slot >= 6) {
+    if (in_party) {
+        if (slot >= 6) {
             reason = "The team slot does not exist";
             return false;
         }
-        start = team_offset + party_record_length * choice.slot;
+        start = team_offset + party_record_length * slot;
         length = party_record_length;
         first = team_sections;
     } else {
-        if (choice.box >= box_count || choice.slot >= box_slots) {
+        if (box >= box_count || slot >= box_slots) {
             reason = "The box slot does not exist";
             return false;
         }
-        start = storage_header + box_record_length * (choice.box * box_slots + choice.slot);
+        start = storage_header + box_record_length * (box * box_slots + slot);
         length = box_record_length;
         first = 5;
     }
@@ -223,7 +228,9 @@ bool PokemonEditor::open(std::string& reason) {
         reason = "There is no Pokemon to edit";
         return false;
     }
-    if (!read_record(image_, block_, reason)) return false;
+    if (!read_record(image_, block_, choices_[selected_].in_party, choices_[selected_].box,
+                     choices_[selected_].slot, reason))
+        return false;
     state_ = read_frlg_pokemon_state(record_.data(), record_.size());
     if (state_.species == 0) {
         reason = "The record holds no Pokemon";

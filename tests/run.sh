@@ -115,6 +115,13 @@ for id in {0..13}; do scenarios+=("tail-$id"); done
     src/frlg_legality.cpp src/frlg_learnsets.cpp src/frlg_species_tables.cpp \
     src/frlg_pokemon_traits.cpp src/frlg_save.cpp src/frlg_content.cpp src/frlg_write.cpp \
     -o "$work/frlg-pokemon-edit-test.exe"
+"$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
+    tests/frlg_pokemon_editor_test.cpp src/frlg_pokemon_editor.cpp src/frlg_pokemon_edit.cpp \
+    src/frlg_pokemon_write.cpp src/frlg_pokemon_traits.cpp src/frlg_legality.cpp \
+    src/frlg_learnsets.cpp src/frlg_species_tables.cpp src/frlg_save.cpp \
+    src/frlg_content.cpp src/frlg_write.cpp src/frlg_pokemon.cpp src/frlg_text.cpp \
+    -o "$work/frlg-pokemon-editor-test.exe"
+"$work/frlg-pokemon-editor-test.exe"
 "$work/frlg-pokemon-edit-test.exe"
 "$work/frlg-learnsets-test.exe"
 "$work/frlg-pokemon-write-test.exe"

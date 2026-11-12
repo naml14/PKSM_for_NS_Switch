@@ -83,8 +83,9 @@ public:
     PokemonEditResult apply(const std::vector<std::uint8_t>& image, std::size_t block) const;
 
 private:
-    // The bytes of the record that is being edited, and where it came from.
+    // The bytes of a record of a Pokemon inside a save.
     bool read_record(const std::vector<std::uint8_t>& image, std::size_t block,
+                     bool in_party, std::size_t box, std::size_t slot,
                      std::string& reason);
     // Looks for a personality value that gives the wanted traits.
     bool search_personality(std::uint8_t nature, std::uint8_t gender, bool shiny,
