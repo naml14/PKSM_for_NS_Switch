@@ -30,6 +30,13 @@ struct LegalityReport {
     std::uint8_t personality = 0;      // the remainder of dividing the personality by one hundred
 };
 
+// Whether the species can have that move at that level: because it learns it
+// when it goes up a level up to that level, because it is one of the moves a
+// hatchling starts with, or because a machine the species can learn teaches
+// it.
+bool frlg_species_can_have_move(std::uint16_t species, std::uint8_t level,
+                                std::uint16_t move) noexcept;
+
 // Checks a record of a Pokemon against what the game allows: the experience
 // against its level, the effort values, the individual values, the moves the
 // species can learn and the personality value a breeding could have produced.

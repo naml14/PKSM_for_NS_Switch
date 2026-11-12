@@ -168,6 +168,28 @@ int main() {
             const auto result = write_frlg_pokemon(record.data(), record.size(), edit);
             require(!result.ok, "the write was accepted");
         }},
+        {"a lower level removes the moves the species no longer has", [] {
+            const auto record = make_record(2400, trainer_id, 50);
+            // The Charmander learns Ember at level seven, so it cannot keep it
+            // at level five.
+            PokemonEdit edit{};
+            edit.set_level = true;
+            edit.level = 5;
+            const auto result = write_frlg_pokemon(record.data(), record.size(), edit);
+            require(result.ok, "the write failed");
+            require(result.new_level == 5, "the level does not read back");
+        }},
+        {"the moves stay the same when the level does not change", [] {
+            const auto record = make_record(2400, trainer_id, 5);
+            PokemonEdit edit{};
+            edit.set_evs = true;
+            edit.evs.hp = 4;
+            const auto result = write_frlg_pokemon(record.data(), record.size(), edit);
+            require(result.ok, "the write failed");
+            const auto before = record;
+            require(std::memcmp(result.record.data() + 0x20 + 12, before.data() + 0x20 + 12, 12) == 0,
+                    "the moves changed without being asked for");
+        }},
         {"the original record is not modified", [] {
             const auto record = make_record(2400, trainer_id, 5);
             const auto copy = record;

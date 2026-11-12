@@ -1,5 +1,6 @@
 #include "pksm/frlg_pokemon_write.hpp"
 
+#include "pksm/frlg_legality.hpp"
 #include "pksm/frlg_species_tables.hpp"
 
 #include <algorithm>
@@ -204,6 +205,21 @@ void set_origin(std::uint8_t* decrypted, std::uint32_t personality,
         (origin.ball & 0x0F) | (origin.trainer_female ? 0x10 : 0x00));
 }
 
+// A Pokemon only keeps the moves it can have at its level. When the level
+// goes down, the moves the species no longer learns at that level are removed
+// and the rest are left alone.
+void adjust_moves(std::uint8_t* decrypted, std::uint32_t personality,
+                  std::uint16_t species, std::uint8_t level) {
+    const auto base = substruct_at(personality, 1);
+    for (std::size_t slot = 0; slot < 4; ++slot) {
+        const auto move = read16(decrypted + base + slot * 2);
+        if (move == 0) continue;
+        if (frlg_species_can_have_move(species, level, move)) continue;
+        write16(decrypted + base + slot * 2, 0);
+        decrypted[base + 8 + slot] = 0;
+    }
+}
+
 // The health of a Pokemon at a level. pret/pokefirered src/pokemon.c, the
 // macro CALC_STAT: the base health of the species, the individual value and
 // the effort value of the health, the level, and ten more.
@@ -328,7 +344,10 @@ PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t le
         decrypted = moved;
     }
 
-    if (edit.set_level) set_experience(decrypted.data(), pid, frlg_exp_for_level(rate, level));
+    if (edit.set_level) {
+        set_experience(decrypted.data(), pid, frlg_exp_for_level(rate, level));
+        adjust_moves(decrypted.data(), pid, species, level);
+    }
     if (edit.set_evs) set_evs(decrypted.data(), pid, evs);
     if (edit.set_ivs) set_ivs(decrypted.data(), pid, ivs);
     if (edit.set_origin) set_origin(decrypted.data(), pid, edit.origin);

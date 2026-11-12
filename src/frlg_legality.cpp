@@ -67,6 +67,11 @@ bool species_can_have_move(std::uint16_t species, std::uint8_t level,
 }
 }  // namespace
 
+bool frlg_species_can_have_move(std::uint16_t species, std::uint8_t level,
+                                std::uint16_t move) noexcept {
+    return species_can_have_move(species, level, move);
+}
+
 LegalityReport check_frlg_legality(const std::uint8_t* record, std::size_t length) {
     LegalityReport report;
     if (record == nullptr || length < box_record_length) return report;
