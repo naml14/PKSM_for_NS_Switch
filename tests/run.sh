@@ -106,6 +106,10 @@ for id in {0..13}; do scenarios+=("tail-$id"); done
     src/frlg_species_tables.cpp \
     -o "$work/frlg-pk3-test.exe"
 "$work/frlg-pk3-test.exe"
+"$CXX" -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
+    tests/frlg_learnsets_test.cpp src/frlg_learnsets.cpp \
+    -o "$work/frlg-learnsets-test.exe"
+"$work/frlg-learnsets-test.exe"
 "$work/frlg-pokemon-write-test.exe"
 "$work/frlg-console-write-test.exe"
 "$work/frlg-report-test.exe"
