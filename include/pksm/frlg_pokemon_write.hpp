@@ -66,6 +66,22 @@ struct PokemonWriteResult {
     std::size_t changed_bytes = 0;          // how many bytes differ from the original
 };
 
+// The values of a record that the editor shows and changes.
+struct PokemonState {
+    std::uint8_t level = 0;
+    std::uint8_t nature = 0;      // the index in the nature table
+    std::uint8_t gender = 0;       // 0 male, 1 female, 2 without gender
+    bool shiny = false;
+    PokemonIv ivs{};
+    PokemonEv evs{};
+    PokemonOrigin origin{};
+    std::array<std::uint8_t, 10> nickname{};
+};
+
+// Reads the values of a record of a Pokemon. A record that is too short or
+// that holds no Pokemon gives a state with nothing in it.
+PokemonState read_frlg_pokemon_state(const std::uint8_t* record, std::size_t length);
+
 // Edits a record of a Pokemon and returns the new one. The original is never
 // modified. The record is only returned after it has been verified: the
 // checksum is recomputed, the data is encrypted again, the record is read

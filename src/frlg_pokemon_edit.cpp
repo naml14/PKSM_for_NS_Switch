@@ -2,6 +2,7 @@
 #include "pksm/frlg_content.hpp"
 #include "pksm/frlg_legality.hpp"
 #include "pksm/frlg_save.hpp"
+#include "pksm/frlg_write.hpp"
 
 #include <algorithm>
 #include <array>
@@ -68,6 +69,11 @@ PokemonEditResult edit_frlg_pokemon(const std::vector<std::uint8_t>& image, std:
     const auto fail = [&](const char* reason) { result.reason = reason; return result; };
     if (image.size() != frlg_image_size) return fail("Unsupported image size");
     if (block >= 2) return fail("Invalid block");
+    // The game loads the block with the higher save counter, so editing the
+    // other one would be ignored by the game.
+    const auto chosen = select_frlg_block(image);
+    if (!chosen.ok) return fail(chosen.reason.c_str());
+    if (chosen.block != block) return fail("The block is not the one the game would load");
     if (request.edit.set_pid && request.edit.pid == 0) return fail("The requested personality value is zero");
     const auto content = read_frlg_content(image, block);
     if (!content.available) { result.reason = content.unavailable_reason; return result; }
@@ -95,6 +101,9 @@ PokemonEditResult edit_frlg_pokemon(const std::vector<std::uint8_t>& image, std:
     }
     const auto before = decode(original.data());
     if (before.species == 0) return fail("The record holds no Pokemon");
+    // A record whose checksum was already wrong is damaged, and the game
+    // would refuse it; fixing the checksum would hide the damage.
+    if (!before.checksum) return fail("The record was already damaged");
     const auto written = write_frlg_pokemon(original.data(), length, request.edit);
     if (!written.ok) { result.reason = written.reason; return result; }
     auto copy = image;

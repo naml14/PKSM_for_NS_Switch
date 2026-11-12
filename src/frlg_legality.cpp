@@ -91,8 +91,15 @@ LegalityReport check_frlg_legality(const std::uint8_t* record, std::size_t lengt
     report.level = level;
     report.personality = static_cast<std::uint8_t>(personality % 100);
 
-    if (rate != GrowthRate::none && frlg_exp_for_level(rate, level) != experience)
-        report.issues.push_back(LegalityIssue::experience_not_of_the_level);
+    // The experience has to be the one of that level: at least the minimum of
+    // the level and less than the minimum of the next one. A record can hold
+    // any value in that range, not only the minimum.
+    if (rate != GrowthRate::none && level < 100) {
+        const auto minimum = frlg_exp_for_level(rate, level);
+        const auto next = frlg_exp_for_level(rate, static_cast<std::uint8_t>(level + 1));
+        if (experience < minimum || experience >= next)
+            report.issues.push_back(LegalityIssue::experience_not_of_the_level);
+    }
     if (report.personality > 31)
         report.issues.push_back(LegalityIssue::personality_not_from_a_breeding);
 

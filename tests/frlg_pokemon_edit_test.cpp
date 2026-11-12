@@ -47,7 +47,8 @@ std::vector<std::uint8_t> image() {
         for (std::size_t id = 0; id < 14; ++id) {
             const auto base = address(b, id, 0);
             put16(v, base + 0xff4, static_cast<std::uint16_t>(id));
-            put32(v, base + 0xff8, 0x08012025); put32(v, base + 0xffc, static_cast<std::uint32_t>(b + 1));
+            put32(v, base + 0xff8, 0x08012025); // The first block has the higher save counter, so it is the one the game loads.
+            put32(v, base + 0xffc, static_cast<std::uint32_t>(b == 0 ? 2 : 1));
         }
         for (std::size_t i = 0; i < 100; ++i) v[address(b, 1, 0x38 + i)] = r[i];
         for (const std::size_t pos : {std::size_t(4 + 80 * 31), std::size_t(3924)})
@@ -83,11 +84,16 @@ void verify(const std::vector<std::uint8_t>& before, const PokemonEditResult& r,
 int main() {
     const std::vector<std::pair<const char*, std::function<void()>>> tests = {
         {"box level", [] { auto v = image(); auto before = v; auto r = edit_frlg_pokemon(v, 0, level_request()); verify(v, r, 0, 5, 4 + 80 * 31, 80); require(r.old_level == 5 && r.new_level == 42 && r.old_pid == r.new_pid && v == before, "level or input differs"); }},
-        {"party level", [] { auto v = image(); auto q = level_request(); q.place = PokemonPlace::party; auto r = edit_frlg_pokemon(v, 1, q); verify(v, r, 1, 1, 0x38, 100); require(r.image[address(1, 1, 0x38 + 0x54)] == 42, "party level differs"); }},
+        {"party level", [] { auto v = image(); auto q = level_request(); q.place = PokemonPlace::party; auto r = edit_frlg_pokemon(v, 0, q); verify(v, r, 0, 1, 0x38, 100); require(r.image[address(0, 1, 0x38 + 0x54)] == 42, "party level differs"); }},
         {"cross-section record", [] { auto v = image(); auto q = level_request(); q.slot = 19; q.edit.set_evs = true; q.edit.evs.hp = 12; auto r = edit_frlg_pokemon(v, 0, q); verify(v, r, 0, 5, 3924, 80); require(r.new_level == 42, "cross-section level differs"); require(get16(v, address(0, 5, 0xff6)) != get16(r.image, address(0, 5, 0xff6)) && get16(v, address(0, 6, 0xff6)) != get16(r.image, address(0, 6, 0xff6)), "both checksums must change"); }},
         {"empty and invalid positions", [] { auto v = image(); auto q = level_request(); q.slot = 2; for (int i = 0; i < 4; ++i) { auto r = edit_frlg_pokemon(v, 0, q); require(!r.ok && !r.reason.empty() && r.image.empty(), "invalid accepted"); if (i == 0) q.box = 14; if (i == 1) { q.box = 0; q.slot = 30; } if (i == 2) { q.place = PokemonPlace::party; q.party = 6; } } }},
         {"pid permutation", [] { auto v = image(); auto q = level_request(); q.edit.set_level = false; q.edit.set_pid = true; q.edit.pid = 2408; auto r = edit_frlg_pokemon(v, 0, q); require(r.ok && r.old_level == 5 && r.new_level == 5 && r.new_pid == 2408, "pid change failed"); auto p = address(0, 5, 4 + 80 * 31); auto key = get32(r.image, p) ^ get32(r.image, p + 4); auto species = static_cast<std::uint16_t>((r.image[p + 0x20 + 24] ^ (key & 255)) | ((r.image[p + 0x20 + 25] ^ ((key >> 8) & 255)) << 8)); require(species == 4, "species differs"); }},
         {"zero pid rejected", [] { auto v = image(); auto q = level_request(); q.edit.set_pid = true; q.edit.pid = 0; auto r = edit_frlg_pokemon(v, 0, q); require(!r.ok && !r.reason.empty() && r.image.empty(), "zero pid accepted"); }},
+        {"the block the game would not load is refused", [] {
+            auto v = image();
+            auto r = edit_frlg_pokemon(v, 1, level_request());
+            require(!r.ok && !r.reason.empty() && r.image.empty(), "the wrong block was accepted");
+        }},
         {"damaged block rejected", [] { auto v = image(); v[address(0, 8, 0)] ^= 1; auto r = edit_frlg_pokemon(v, 0, level_request()); require(!r.ok && !r.reason.empty() && r.image.empty(), "damaged block accepted"); }}
     };
     int passed = 0, failed = 0;

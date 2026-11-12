@@ -88,6 +88,14 @@ ImageWriteResult commit_frlg_image(const std::string& path,
         result.reason = "Unsupported image size";
         return result;
     }
+    // The file has to still hold the bytes the change was prepared from. If
+    // the game saved while the user was choosing, writing now would throw
+    // those changes away, so nothing is written at all.
+    std::vector<std::uint8_t> current;
+    if (!read_frlg_save_file(path, current) || current != original) {
+        result.reason = "the save changed while the edit was being prepared";
+        return result;
+    }
     const bool wrote = write_file(path, image);
     std::vector<std::uint8_t> written;
     if (wrote && read_frlg_save_file(path, written) && written == image) {

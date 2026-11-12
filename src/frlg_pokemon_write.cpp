@@ -1,6 +1,7 @@
 #include "pksm/frlg_pokemon_write.hpp"
 
 #include "pksm/frlg_legality.hpp"
+#include "pksm/frlg_pokemon_traits.hpp"
 #include "pksm/frlg_species_tables.hpp"
 
 #include <algorithm>
@@ -196,8 +197,10 @@ void read_origin(const std::uint8_t* decrypted, std::uint32_t personality,
 void set_origin(std::uint8_t* decrypted, std::uint32_t personality,
                 const PokemonOrigin& origin) {
     const auto base = substruct_at(personality, 3);
+    // The flag of an egg shares its byte with the ability, and the ability is
+    // left as it was.
     decrypted[base + 7] = static_cast<std::uint8_t>(
-        (decrypted[base + 7] & 0x3F) | (origin.egg ? 0x40 : 0x00));
+        (decrypted[base + 7] & 0xBF) | (origin.egg ? 0x40 : 0x00));
     decrypted[base + 1] = origin.location;
     decrypted[base + 2] = static_cast<std::uint8_t>(
         (origin.level & 0x7F) | ((origin.game & 0x0F) << 7));
@@ -347,7 +350,10 @@ PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t le
 
     if (edit.set_level) {
         set_experience(decrypted.data(), pid, frlg_exp_for_level(rate, level));
-        adjust_moves(decrypted.data(), pid, species, level);
+        // The moves only go when the level goes down: a move the species can
+        // still have is left alone, and a level that goes up teaches nothing
+        // here.
+        if (level < result.old_level) adjust_moves(decrypted.data(), pid, species, level);
     }
     if (edit.set_evs) set_evs(decrypted.data(), pid, evs);
     if (edit.set_ivs) set_ivs(decrypted.data(), pid, ivs);
@@ -363,7 +369,10 @@ PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t le
 
     // A record of the party carries the level and the health, and they have
     // to agree with the new level.
-    if (in_party) {
+    // The level and the health of a record of the party follow the level, and
+    // only when the level changes: a record whose nickname is edited keeps the
+    // health it had.
+    if (in_party && edit.set_level) {
         copy[party_level_offset] = level;
         const auto health = max_health(species, ivs, evs, level);
         write16(copy.data() + party_hp_offset, health);
@@ -424,6 +433,35 @@ PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t le
     result.record = copy;
     result.ok = true;
     return result;
+}
+
+PokemonState read_frlg_pokemon_state(const std::uint8_t* record, std::size_t length) {
+    PokemonState state;
+    if (record == nullptr || length < box_record_length) return state;
+    const auto personality = read32(record + personality_offset);
+    const auto key = personality ^ read32(record + ot_id_offset);
+    std::array<std::uint8_t, secure_length> decrypted{};
+    for (std::size_t i = 0; i < secure_length; ++i)
+        decrypted[i] = static_cast<std::uint8_t>(
+            record[secure_offset + i] ^ static_cast<std::uint8_t>(key >> (8 * (i % 4))));
+    const auto species = read16(decrypted.data() + substruct_at(personality, 0));
+    if (species == 0) return state;
+    const auto rate = frlg_growth_rate(species);
+    state.level = frlg_level_for_exp(
+        rate, read32(decrypted.data() + substruct_at(personality, 0) + 4));
+    read_evs(decrypted.data(), personality, state.evs);
+    read_ivs(decrypted.data(), personality, state.ivs);
+    read_origin(decrypted.data(), personality, state.origin);
+    std::memcpy(state.nickname.data(), record + nickname_offset, 10);
+    const auto traits = frlg_traits_from_pid(
+        personality, read32(record + ot_id_offset),
+        static_cast<std::uint8_t>(frlg_gender_ratio(species)));
+    state.nature = traits.nature;
+    state.shiny = traits.shiny;
+    state.gender = traits.gender == PokemonGender::female
+                       ? 1
+                       : (traits.gender == PokemonGender::genderless ? 2 : 0);
+    return state;
 }
 
 PokemonOrigin read_frlg_pokemon_origin(const std::uint8_t* record, std::size_t length) {

@@ -115,6 +115,22 @@ int main() {
             require(result.ok && !result.rolled_back && result.reason.empty(), "image write failed");
             require(read_file(path) == image, "image differs on disk");
         }},
+        {"a save that changed while the edit was prepared is not overwritten", [] {
+            // The game saved while the user was choosing: the file on disk is
+            // not the one the change was prepared from, and writing now would
+            // throw that save away.
+            const auto original = make_image(17, 16);
+            auto changed = original;
+            changed[0x5000] ^= 1;
+            auto image = original;
+            image[123] ^= 1;
+            const auto path = scratch() / "changed.sav";
+            write_file(path, changed);
+            const auto result = commit_frlg_image(path.string(), original, image);
+            require(!result.ok, "the write was accepted over a changed save");
+            require(!result.reason.empty(), "the refusal has no reason");
+            require(read_file(path) == changed, "the changed save was overwritten");
+        }},
         {"invalid image sizes do not write", [] {
             const auto original = make_image(17, 16);
             auto short_image = original;
