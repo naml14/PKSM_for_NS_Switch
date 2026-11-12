@@ -68,6 +68,7 @@ struct PokemonWriteResult {
 
 // The values of a record that the editor shows and changes.
 struct PokemonState {
+    std::uint16_t species = 0;
     std::uint8_t level = 0;
     std::uint8_t nature = 0;      // the index in the nature table
     std::uint8_t gender = 0;       // 0 male, 1 female, 2 without gender

@@ -446,6 +446,7 @@ PokemonState read_frlg_pokemon_state(const std::uint8_t* record, std::size_t len
             record[secure_offset + i] ^ static_cast<std::uint8_t>(key >> (8 * (i % 4))));
     const auto species = read16(decrypted.data() + substruct_at(personality, 0));
     if (species == 0) return state;
+    state.species = species;
     const auto rate = frlg_growth_rate(species);
     state.level = frlg_level_for_exp(
         rate, read32(decrypted.data() + substruct_at(personality, 0) + 4));
