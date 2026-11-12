@@ -4,6 +4,7 @@
 // The .pk3 format holds the same record as the game, with the data already
 // decrypted and with the checksum of the record. The files are not part of
 // the repository, so the test is skipped when the directory is not there.
+#include "pksm/frlg_pokemon_traits.hpp"
 #include "pksm/frlg_pokemon_write.hpp"
 #include "pksm/frlg_species_tables.hpp"
 
@@ -129,6 +130,18 @@ int main() {
             require(level >= 1 && level <= 100, "the level is out of range");
             if (pk3.size() > 0x54)
                 require(pk3[0x54] == level, "the level of the party does not match the experience");
+
+            // The exported name marks the shiny ones, so the traits that the
+            // personality value produces have to agree with it.
+            const auto traits = frlg_traits_from_pid(pid, read32(pk3.data(), 4),
+                                                     static_cast<std::uint8_t>(
+                                                         frlg_gender_ratio(species)));
+            const bool marked_shiny = name.find("★") != std::string::npos;
+            require(traits.shiny == marked_shiny,
+                    "the shininess does not match the exported name");
+            if (frlg_gender_ratio(species) == GenderRatio::genderless)
+                require(traits.gender == PokemonGender::genderless,
+                        "a species without gender does not read as one");
 
             // The record the game stores is the exported one, encrypted.
             const auto record = to_game_record(pk3);
