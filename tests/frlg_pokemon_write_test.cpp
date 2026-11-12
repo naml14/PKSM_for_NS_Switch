@@ -124,6 +124,18 @@ int main() {
             const auto result = write_frlg_pokemon(record.data(), record.size(), edit);
             require(result.ok, "the write failed");
         }},
+        {"the species survives a personality value that moves it", [] {
+            // The personality value modulo twenty four decides where the four
+            // substructures are stored, so a new value can move the species to
+            // another place of the record.
+            const auto record = make_record(2400, trainer_id, 5);
+            PokemonEdit edit{};
+            edit.set_pid = true;
+            edit.pid = 2408;
+            const auto result = write_frlg_pokemon(record.data(), record.size(), edit);
+            require(result.ok, "the write failed");
+            require(result.new_pid == 2408, "the personality value was not written");
+        }},
         {"the personality value can be changed", [] {
             const auto record = make_record(2400, trainer_id, 5);
             PokemonEdit edit{};

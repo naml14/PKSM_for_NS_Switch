@@ -331,9 +331,10 @@ PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t le
     if (pid != old_pid) {
         // The substructures have to travel to their new places. The canonical
         // type zero holds the species and the experience, the type two the
-        // effort values and the type three the individual values.
+        // effort values and the type three the individual values. Each one
+        // goes to the place the NEW personality value decides.
         std::array<std::uint8_t, secure_length> moved{};
-        std::memcpy(moved.data() + substruct_at(old_pid, 0),
+        std::memcpy(moved.data() + substruct_at(pid, 0),
                     decrypted.data() + substruct_at(old_pid, 0), substruct_length);
         std::memcpy(moved.data() + substruct_at(pid, 1),
                     decrypted.data() + substruct_at(old_pid, 1), substruct_length);
