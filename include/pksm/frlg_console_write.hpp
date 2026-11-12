@@ -7,6 +7,17 @@
 
 namespace pksm {
 
+// Result of writing and verifying a complete image.
+struct ImageWriteResult {
+    bool ok = false;
+    std::string reason;
+    bool rolled_back = false;
+};
+
+ImageWriteResult commit_frlg_image(const std::string& path,
+                                    const std::vector<std::uint8_t>& original,
+                                    const std::vector<std::uint8_t>& image) noexcept;
+
 // The bytes that are going to be written, prepared and checked before
 // anything touches the save file. The original bytes travel with the plan so
 // that a failed write can be undone.

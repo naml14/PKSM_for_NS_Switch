@@ -41,4 +41,9 @@ struct DecodedName {
 DecodedName decode_frlg_name(const std::uint8_t* codes, std::size_t length,
                               std::uint8_t language_byte);
 
+// Encodes one name using a single table and pads unused capacity with 0xFF.
+// Returns the number of character codes written, excluding padding.
+std::size_t encode_frlg_name(std::uint8_t* destination, std::size_t capacity,
+                             const std::string& text) noexcept;
+
 }  // namespace pksm

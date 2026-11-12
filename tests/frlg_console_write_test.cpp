@@ -105,6 +105,36 @@ const std::filesystem::path& scratch() {
 
 int main() {
     const std::vector<std::pair<const char*, std::function<void()>>> tests = {
+        {"a complete image is written and verified", [] {
+            const auto original = make_image(17, 16);
+            auto image = original;
+            image[123] ^= 1;
+            const auto path = scratch() / "image.sav";
+            write_file(path, original);
+            const auto result = commit_frlg_image(path.string(), original, image);
+            require(result.ok && !result.rolled_back && result.reason.empty(), "image write failed");
+            require(read_file(path) == image, "image differs on disk");
+        }},
+        {"invalid image sizes do not write", [] {
+            const auto original = make_image(17, 16);
+            auto short_image = original;
+            short_image.pop_back();
+            const auto path = scratch() / "image-size.sav";
+            write_file(path, original);
+            const auto a = commit_frlg_image(path.string(), original, short_image);
+            require(!a.ok && !a.reason.empty() && !a.rolled_back, "short image accepted");
+            require(read_file(path) == original, "short image touched file");
+            const auto b = commit_frlg_image(path.string(), short_image, original);
+            require(!b.ok && !b.reason.empty() && !b.rolled_back, "short original accepted");
+            require(read_file(path) == original, "short original touched file");
+        }},
+        {"a missing image destination reports failed restoration", [] {
+            const auto image = make_image(17, 16);
+            const auto path = scratch() / "missing-directory" / "image.sav";
+            const auto result = commit_frlg_image(path.string(), image, image);
+            require(!result.ok && !result.rolled_back && !result.reason.empty(), "missing file accepted");
+            require(!std::filesystem::exists(path), "missing file created");
+        }},
         {"the editor starts at zero on the most significant digit", [] {
             const MoneyEditor editor{};
             require(editor.value == 0, "the value does not start at zero");

@@ -105,7 +105,87 @@ void append_utf8(std::string& out, char16_t unit) {
     }
 }
 
+// Match individual Unicode characters, rather than the table's multi-character
+// abbreviations, so the result does not depend on greedy tokenization.
+bool match_character(const std::string& text, std::size_t pos, char16_t unit,
+                     std::size_t& length) noexcept {
+    const auto value = static_cast<std::uint32_t>(unit);
+    char bytes[3];
+    if (value < 0x80) {
+        bytes[0] = static_cast<char>(value);
+        length = 1;
+    } else if (value < 0x800) {
+        bytes[0] = static_cast<char>(0xC0 | (value >> 6));
+        bytes[1] = static_cast<char>(0x80 | (value & 0x3F));
+        length = 2;
+    } else {
+        bytes[0] = static_cast<char>(0xE0 | (value >> 12));
+        bytes[1] = static_cast<char>(0x80 | ((value >> 6) & 0x3F));
+        bytes[2] = static_cast<char>(0x80 | (value & 0x3F));
+        length = 3;
+    }
+    return text.size() - pos >= length && text.compare(pos, length, bytes, length) == 0;
+}
+
+bool find_character(const std::array<const char16_t*, 256>& table,
+                    const std::string& text, std::size_t pos,
+                    std::uint8_t& code, std::size_t& length) noexcept {
+    for (std::size_t i = 0; i < terminator; ++i) {
+        const auto entry = table[i];
+        if (entry != nullptr && entry[1] == u'\0' &&
+            match_character(text, pos, entry[0], length)) {
+            code = static_cast<std::uint8_t>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool supports_name(const std::array<const char16_t*, 256>& table,
+                   const std::string& text) noexcept {
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        std::uint8_t code = 0;
+        std::size_t length = 0;
+        if (!find_character(table, text, pos, code, length)) return false;
+        pos += length;
+    }
+    return true;
+}
+
 } // namespace
+
+std::size_t encode_frlg_name(std::uint8_t* destination, std::size_t capacity,
+                             const std::string& text) noexcept {
+    if (destination == nullptr) return 0;
+    // If neither table covers the whole name, retain the longest encodable
+    // prefix; ties keep the international preference.
+    const auto prefix_length = [&text](const auto& candidate) noexcept {
+        std::size_t pos = 0;
+        while (pos < text.size()) {
+            std::uint8_t code = 0;
+            std::size_t length = 0;
+            if (!find_character(candidate, text, pos, code, length)) break;
+            pos += length;
+        }
+        return pos;
+    };
+    const auto& table = supports_name(international_table, text) ? international_table
+                      : supports_name(japanese_table, text) ? japanese_table
+                      : prefix_length(japanese_table) > prefix_length(international_table)
+                            ? japanese_table : international_table;
+    std::size_t pos = 0;
+    std::size_t written = 0;
+    while (pos < text.size() && written < capacity) {
+        std::uint8_t code = 0;
+        std::size_t length = 0;
+        if (!find_character(table, text, pos, code, length)) break;
+        destination[written++] = code;
+        pos += length;
+    }
+    for (std::size_t i = written; i < capacity; ++i) destination[i] = terminator;
+    return written;
+}
 
 std::string decode_frlg_text(const std::uint8_t* codes, std::size_t length,
                               FrlgTextLanguage language) {

@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -23,6 +24,24 @@ std::string decode(const std::vector<std::uint8_t>& codes,
 
 int main() {
     const std::vector<std::pair<const char*, std::function<void()>>> tests = {
+        {"names encode with one table and padding", [] {
+            std::array<std::uint8_t, 10> bytes{};
+            require(encode_frlg_name(bytes.data(), bytes.size(), "Andres") == 6, "wrong length");
+            require(decode_frlg_name(bytes.data(), bytes.size(), 1).text == "Andres", "international round trip failed");
+            require(bytes[6] == 0xFF && bytes[9] == 0xFF, "missing padding");
+            const std::string kana = "\xE3\x82\xBF\xE3\x83\x9E\xE3\x82\xB4";
+            require(encode_frlg_name(bytes.data(), bytes.size(), kana) == 3, "wrong Japanese length");
+            const auto decoded = decode_frlg_name(bytes.data(), bytes.size(), 1);
+            require(decoded.text == kana && decoded.table == FrlgTextLanguage::japanese && decoded.fallback, "Japanese round trip failed");
+        }},
+        {"encoding respects capacity and unsupported characters", [] {
+            std::array<std::uint8_t, 4> bytes{};
+            require(encode_frlg_name(bytes.data(), 2, "ABC") == 2, "wrong truncated length");
+            require(bytes[2] == 0, "capacity exceeded");
+            require(encode_frlg_name(bytes.data(), bytes.size(), "A\xF0\x9F\x98\x80" "B") == 1, "unsupported character not stopped");
+            require(bytes[1] == 0xFF && bytes[3] == 0xFF, "unsupported character not padded");
+            require(encode_frlg_name(nullptr, 4, "A") == 0, "null destination accepted");
+        }},
         {"the real trainer name decodes", [] {
             // The trainer name of the inspected save, whose backup file is
             // named after it.

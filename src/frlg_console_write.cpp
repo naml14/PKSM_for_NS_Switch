@@ -80,6 +80,26 @@ bool restore_frlg_save_file(const std::string& path,
     return read_file(path, written) && written == bytes;
 }
 
+ImageWriteResult commit_frlg_image(const std::string& path,
+                                    const std::vector<std::uint8_t>& original,
+                                    const std::vector<std::uint8_t>& image) noexcept {
+    ImageWriteResult result;
+    if (original.size() != frlg_image_size || image.size() != frlg_image_size) {
+        result.reason = "Unsupported image size";
+        return result;
+    }
+    const bool wrote = write_file(path, image);
+    std::vector<std::uint8_t> written;
+    if (wrote && read_frlg_save_file(path, written) && written == image) {
+        result.ok = true;
+        return result;
+    }
+    result.rolled_back = restore_frlg_save_file(path, original);
+    result.reason = result.rolled_back ? "the image could not be written and verified"
+                                       : "the image could not be written and verified and the original bytes could not be restored";
+    return result;
+}
+
 MoneyWritePlan plan_frlg_money_write(const std::vector<std::uint8_t>& original,
                                      std::uint32_t value) {
     MoneyWritePlan plan;
