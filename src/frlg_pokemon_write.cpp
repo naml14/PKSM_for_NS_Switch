@@ -426,4 +426,17 @@ PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t le
     return result;
 }
 
+PokemonOrigin read_frlg_pokemon_origin(const std::uint8_t* record, std::size_t length) {
+    PokemonOrigin origin;
+    if (record == nullptr || length < box_record_length) return origin;
+    const auto personality = read32(record + personality_offset);
+    const auto key = personality ^ read32(record + ot_id_offset);
+    std::array<std::uint8_t, secure_length> decrypted{};
+    for (std::size_t i = 0; i < secure_length; ++i)
+        decrypted[i] = static_cast<std::uint8_t>(
+            record[secure_offset + i] ^ static_cast<std::uint8_t>(key >> (8 * (i % 4))));
+    read_origin(decrypted.data(), personality, origin);
+    return origin;
+}
+
 }  // namespace pksm

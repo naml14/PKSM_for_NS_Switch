@@ -76,4 +76,7 @@ struct PokemonWriteResult {
 PokemonWriteResult write_frlg_pokemon(const std::uint8_t* record, std::size_t length,
                                       const PokemonEdit& edit);
 
+// Reads the origin of a record: where it came from and who found it.
+PokemonOrigin read_frlg_pokemon_origin(const std::uint8_t* record, std::size_t length);
+
 }  // namespace pksm

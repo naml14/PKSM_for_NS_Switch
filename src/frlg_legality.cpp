@@ -16,13 +16,11 @@ namespace {
 // https://raw.githubusercontent.com/pret/pokefirered/master/include/pokemon.h
 // https://raw.githubusercontent.com/pret/pokefirered/master/src/pokemon.c
 constexpr std::size_t box_record_length = 0x50;
-constexpr std::size_t party_record_length = 0x64;
 constexpr std::size_t personality_offset = 0x00;
 constexpr std::size_t ot_id_offset = 0x04;
 constexpr std::size_t secure_offset = 0x20;
 constexpr std::size_t secure_length = 48;
 constexpr std::size_t substruct_length = 12;
-constexpr std::size_t party_level_offset = 0x54;
 
 constexpr std::uint8_t substruct_positions[24][4] = {
     {0, 1, 2, 3}, {0, 1, 3, 2}, {0, 2, 1, 3}, {0, 3, 1, 2}, {0, 2, 3, 1}, {0, 3, 2, 1},
