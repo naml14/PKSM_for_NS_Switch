@@ -123,6 +123,10 @@ bool PokemonEditor::begin(const std::vector<std::uint8_t>& image, std::size_t bl
     open_ = false;
     changed_ = false;
     if (image.size() != frlg_image_size || block >= 2) return false;
+    // The image and the block are kept so that the record of the chosen
+    // Pokemon can be found later.
+    image_ = image;
+    block_ = block;
     const auto content = read_frlg_content(image, block);
     if (!content.available) return false;
     const auto party = read_frlg_party(content);
