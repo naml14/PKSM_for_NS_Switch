@@ -28,6 +28,15 @@ int main() {
             require(!pksm::frlg_learns_tmhm(1, 1), "unexpected TM01");
             require(!pksm::frlg_learns_tmhm(1, 0) && !pksm::frlg_learns_tmhm(1, 59), "invalid machine");
         }},
+        {"machine moves", [] {
+            // https://raw.githubusercontent.com/pret/pokefirered/master/src/data/items.json
+            // TM01 teaches Focus Punch and HM08 teaches Dive.
+            require(pksm::frlg_tmhm_move(1) == 264, "wrong TM01 move");
+            require(pksm::frlg_tmhm_move(58) == 291, "wrong HM08 move");
+            require(pksm::frlg_tmhm_move(0) == 0, "machine zero accepted");
+            require(pksm::frlg_tmhm_move(59) == 0, "machine 59 accepted");
+            require(pksm::frlg_tmhm_move(255) == 0, "machine 255 accepted");
+        }},
         {"Bulbasaur egg moves", [] {
             // https://raw.githubusercontent.com/pret/pokefirered/master/src/data/pokemon/egg_moves.h
             // Bulbasaur inherits Light Screen, Skull Bash, Safeguard, Charm,

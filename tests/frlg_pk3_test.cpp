@@ -4,6 +4,7 @@
 // The .pk3 format holds the same record as the game, with the data already
 // decrypted and with the checksum of the record. The files are not part of
 // the repository, so the test is skipped when the directory is not there.
+#include "pksm/frlg_legality.hpp"
 #include "pksm/frlg_pokemon_traits.hpp"
 #include "pksm/frlg_pokemon_write.hpp"
 #include "pksm/frlg_species_tables.hpp"
@@ -145,6 +146,21 @@ int main() {
 
             // The record the game stores is the exported one, encrypted.
             const auto record = to_game_record(pk3);
+
+            // The legality of the record: the experience, the effort values,
+            // the individual values and the moves are all fine, so the only
+            // thing that can keep a record from being one the game produced is
+            // a personality value that a breeding could not have produced.
+            const auto legality = check_frlg_legality(record.data(), record.size());
+            require(legality.level == level, "the level of the legality check differs");
+            const bool breeding_legal = legality.personality <= 31;
+            require(legality.legal == breeding_legal,
+                    "the legality does not follow the personality value");
+            require((legality.issues.empty() ||
+                     (legality.issues.size() == 1 &&
+                      legality.issues.front() ==
+                          LegalityIssue::personality_not_from_a_breeding)),
+                    "the record has a problem other than the personality value");
 
             // Writing it without changing anything has to give the same
             // record back, with the same checksum and the same data.

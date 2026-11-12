@@ -11,6 +11,10 @@ std::size_t frlg_level_up_move_count(std::uint16_t species) noexcept;
 const LevelUpMove& frlg_level_up_move(std::uint16_t species, std::size_t index) noexcept;
 // Machines 1-50 are TM01-TM50; 51-58 are HM01-HM08.
 bool frlg_learns_tmhm(std::uint16_t species, std::uint8_t machine) noexcept;
+// The move that the machine teaches. The number of the machine goes from one
+// to fifty eight: the fifty technical machines and the eight hidden machines.
+// A machine outside that range has no move.
+std::uint16_t frlg_tmhm_move(std::uint8_t machine) noexcept;
 std::size_t frlg_egg_move_count(std::uint16_t species) noexcept;
 std::uint16_t frlg_egg_move(std::uint16_t species, std::size_t index) noexcept;
 }  // namespace pksm

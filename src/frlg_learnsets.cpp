@@ -6,6 +6,7 @@
 //   https://raw.githubusercontent.com/pret/pokefirered/master/src/data/pokemon/egg_moves.h
 //   https://raw.githubusercontent.com/pret/pokefirered/master/include/constants/species.h
 //   https://raw.githubusercontent.com/pret/pokefirered/master/include/constants/moves.h
+//   https://raw.githubusercontent.com/pret/pokefirered/master/src/data/items.json
 // Machines 1-50 are TM01-TM50; 51-58 are HM01-HM08.
 #include "pksm/frlg_learnsets.hpp"
 namespace pksm {
@@ -4883,6 +4884,66 @@ constexpr std::uint64_t machines[] = {
     UINT64_C(18470711741615656),
     UINT64_C(0),
 };
+constexpr std::uint16_t machine_moves[] = {
+    264, // MOVE_FOCUS_PUNCH
+    337, // MOVE_DRAGON_CLAW
+    352, // MOVE_WATER_PULSE
+    347, // MOVE_CALM_MIND
+    46, // MOVE_ROAR
+    92, // MOVE_TOXIC
+    258, // MOVE_HAIL
+    339, // MOVE_BULK_UP
+    331, // MOVE_BULLET_SEED
+    237, // MOVE_HIDDEN_POWER
+    241, // MOVE_SUNNY_DAY
+    269, // MOVE_TAUNT
+    58, // MOVE_ICE_BEAM
+    59, // MOVE_BLIZZARD
+    63, // MOVE_HYPER_BEAM
+    113, // MOVE_LIGHT_SCREEN
+    182, // MOVE_PROTECT
+    240, // MOVE_RAIN_DANCE
+    202, // MOVE_GIGA_DRAIN
+    219, // MOVE_SAFEGUARD
+    218, // MOVE_FRUSTRATION
+    76, // MOVE_SOLAR_BEAM
+    231, // MOVE_IRON_TAIL
+    85, // MOVE_THUNDERBOLT
+    87, // MOVE_THUNDER
+    89, // MOVE_EARTHQUAKE
+    216, // MOVE_RETURN
+    91, // MOVE_DIG
+    94, // MOVE_PSYCHIC
+    247, // MOVE_SHADOW_BALL
+    280, // MOVE_BRICK_BREAK
+    104, // MOVE_DOUBLE_TEAM
+    115, // MOVE_REFLECT
+    351, // MOVE_SHOCK_WAVE
+    53, // MOVE_FLAMETHROWER
+    188, // MOVE_SLUDGE_BOMB
+    201, // MOVE_SANDSTORM
+    126, // MOVE_FIRE_BLAST
+    317, // MOVE_ROCK_TOMB
+    332, // MOVE_AERIAL_ACE
+    259, // MOVE_TORMENT
+    263, // MOVE_FACADE
+    290, // MOVE_SECRET_POWER
+    156, // MOVE_REST
+    213, // MOVE_ATTRACT
+    168, // MOVE_THIEF
+    211, // MOVE_STEEL_WING
+    285, // MOVE_SKILL_SWAP
+    289, // MOVE_SNATCH
+    315, // MOVE_OVERHEAT
+    15, // MOVE_CUT
+    19, // MOVE_FLY
+    57, // MOVE_SURF
+    70, // MOVE_STRENGTH
+    148, // MOVE_FLASH
+    249, // MOVE_ROCK_SMASH
+    127, // MOVE_WATERFALL
+    291, // MOVE_DIVE
+};
 constexpr std::uint16_t eggs[] = {
     113, // MOVE_LIGHT_SCREEN
     130, // MOVE_SKULL_BASH
@@ -6287,6 +6348,9 @@ const LevelUpMove& frlg_level_up_move(std::uint16_t species, std::size_t index) 
 bool frlg_learns_tmhm(std::uint16_t species, std::uint8_t machine) noexcept {
     return species < species_count && machine >= 1 && machine <= 58 &&
            (machines[species] & (UINT64_C(1) << (machine - 1))) != 0;
+}
+std::uint16_t frlg_tmhm_move(std::uint8_t machine) noexcept {
+    return machine >= 1 && machine <= 58 ? machine_moves[machine - 1] : 0;
 }
 std::size_t frlg_egg_move_count(std::uint16_t species) noexcept {
     return species < species_count ? egg_ranges[species].count : 0;
